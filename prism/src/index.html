@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'" />
+<title>PRISM — Synesthesia Mapping Engine</title>
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="app" id="app">
+
+  <header class="titlebar">
+    <div class="brand">
+      <span class="mark" id="brandMark"></span>
+      <span class="wordmark">PRISM</span>
+      <span class="tagline">synesthesia mapping engine · circle of fifths</span>
+    </div>
+
+    <nav class="modes" role="tablist" aria-label="Output mode">
+      <button class="mode is-active" data-mode="crystal" role="tab" aria-selected="true">Crystal</button>
+      <button class="mode" data-mode="field" role="tab" aria-selected="false">Field</button>
+      <button class="mode" data-mode="prism" role="tab" aria-selected="false">Prism</button>
+    </nav>
+
+    <div class="titlebar-right">
+      <div class="focus-badge" id="focusBadge" data-state="captured">
+        <span class="dot"></span><span class="focus-text">KEYS CAPTURED</span>
+      </div>
+      <button class="icon-btn" id="settingsBtn" title="Settings">Settings</button>
+      <button class="icon-btn" id="fullscreenBtn" title="Fullscreen (F11)">Full</button>
+      <div class="win-controls" id="winControls">
+        <button class="win min" id="winMin" aria-label="Minimise"></button>
+        <button class="win max" id="winMax" aria-label="Maximise"></button>
+        <button class="win close" id="winClose" aria-label="Close"></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="stage-wrap" id="stageWrap">
+    <canvas id="stage"></canvas>
+    <div class="stage-vignette" aria-hidden="true"></div>
+
+    <section class="hud hud-readout" id="hudReadout">
+      <div class="chord-name" id="chordName">—</div>
+      <div class="chord-quality" id="chordQuality">silent</div>
+
+      <div class="meter">
+        <div class="meter-head">
+          <span id="tensionLabel">—</span>
+          <span class="meter-value" id="tensionValue">0.00</span>
+        </div>
+        <div class="meter-track"><div class="meter-fill" id="tensionFill"></div></div>
+        <div class="meter-scale"><span>consonant</span><span>dissonant</span></div>
+      </div>
+
+      <dl class="stats">
+        <div><dt>voices</dt><dd id="statVoices">0</dd></div>
+        <div><dt>fifths span</dt><dd id="statSpan">0</dd></div>
+        <div><dt>mean steps</dt><dd id="statMean">0.0</dd></div>
+        <div><dt>hue spread</dt><dd id="statSpread">0°</dd></div>
+      </dl>
+
+      <div class="swatches" id="swatches"></div>
+    </section>
+
+    <section class="hud hud-wheel">
+      <canvas id="wheel"></canvas>
+      <div class="wheel-caption">circle of fifths</div>
+    </section>
+
+    <div class="stage-foot">
+      <span id="latencyReadout">— ms</span>
+      <span class="sep">·</span>
+      <span id="fpsReadout">— fps</span>
+      <span class="sep">·</span>
+      <span id="sourceReadout">keyboard</span>
+    </div>
+
+    <div class="release-veil" id="releaseVeil" hidden>
+      <div class="veil-card">
+        <div class="veil-title">Keyboard released</div>
+        <p>The note keys are back under normal control — type, tab away, use shortcuts.</p>
+        <button class="veil-btn" id="veilRearm">Re-arm keyboard <kbd>Enter</kbd></button>
+      </div>
+    </div>
+  </main>
+
+  <section class="dock" id="dock">
+    <div class="dock-side">
+      <div class="dock-group">
+        <span class="dock-label">Octave</span>
+        <div class="stepper">
+          <button id="octDown" aria-label="Octave down">−</button>
+          <span id="octValue">C4</span>
+          <button id="octUp" aria-label="Octave up">+</button>
+        </div>
+        <span class="hint"><kbd>Z</kbd><kbd>X</kbd></span>
+      </div>
+      <div class="dock-group">
+        <span class="dock-label">Velocity</span>
+        <input type="range" id="velocity" min="5" max="100" value="80" />
+        <span class="hint"><kbd>,</kbd><kbd>.</kbd></span>
+      </div>
+    </div>
+
+    <div class="keybed-wrap">
+      <div class="keybed" id="keybed"></div>
+    </div>
+
+    <div class="breakaway-wrap">
+      <div class="tear" aria-hidden="true"></div>
+      <button class="breakaway" id="breakawayKey" data-state="captured">
+        <span class="breakaway-title" id="breakawayTitle">Breakaway</span>
+        <span class="breakaway-sub" id="breakawaySub">release keyboard</span>
+        <kbd id="breakawayKbd">esc</kbd>
+      </button>
+    </div>
+  </section>
+
+  <aside class="settings" id="settings" hidden>
+    <header class="settings-head">
+      <h2>Settings</h2>
+      <button class="icon-btn" id="settingsClose" aria-label="Close settings">✕</button>
+    </header>
+
+    <div class="settings-body">
+      <fieldset>
+        <legend>Input</legend>
+        <label class="field">
+          <span>MIDI device</span>
+          <select id="midiSelect"><option value="all">All devices</option></select>
+        </label>
+        <div class="status-line" id="midiStatus">MIDI: not connected</div>
+        <button class="wide-btn" id="midiConnect">Connect MIDI</button>
+
+        <label class="field toggle">
+          <span>Microphone pitch tracking</span>
+          <input type="checkbox" id="micToggle" />
+        </label>
+        <label class="field">
+          <span>Mic sensitivity</span>
+          <input type="range" id="micSensitivity" min="0" max="100" value="50" />
+        </label>
+        <div class="status-line" id="micStatus">Mic: off</div>
+        <p class="note">Microphone tracking is monophonic — it follows one line at a time. Play chords over MIDI or the computer keyboard.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Colour</legend>
+        <label class="field">
+          <span>Palette</span>
+          <select id="paletteSelect"></select>
+        </label>
+        <label class="field">
+          <span>Wheel rotation <b id="rotationValue">0°</b></span>
+          <input type="range" id="rotation" min="0" max="359" value="0" />
+        </label>
+        <label class="field">
+          <span>Brightness <b id="brightnessValue">100%</b></span>
+          <input type="range" id="brightness" min="15" max="150" value="100" />
+        </label>
+        <label class="field">
+          <span>Trail <b id="trailValue">45%</b></span>
+          <input type="range" id="trail" min="0" max="100" value="45" />
+        </label>
+        <label class="field">
+          <span>Spin <b id="spinValue">0.00</b></span>
+          <input type="range" id="spin" min="-40" max="40" value="6" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Sound</legend>
+        <label class="field">
+          <span>Waveform</span>
+          <select id="waveform">
+            <option value="sawtooth">Saw</option>
+            <option value="square">Square</option>
+            <option value="triangle">Triangle</option>
+            <option value="sine">Sine</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Volume <b id="volumeValue">50%</b></span>
+          <input type="range" id="volume" min="0" max="100" value="50" />
+        </label>
+        <label class="field">
+          <span>Space <b id="spaceValue">35%</b></span>
+          <input type="range" id="space" min="0" max="100" value="35" />
+        </label>
+        <label class="field">
+          <span>Release <b id="releaseValue">0.32s</b></span>
+          <input type="range" id="release" min="5" max="200" value="32" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Keys</legend>
+        <dl class="shortcuts">
+          <div><dt><kbd>A</kbd>…<kbd>'</kbd></dt><dd>play notes</dd></div>
+          <div><dt><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></dt><dd>accidentals</dd></div>
+          <div><dt><kbd>Z</kbd><kbd>X</kbd></dt><dd>octave</dd></div>
+          <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>velocity</dd></div>
+          <div><dt><kbd>Esc</kbd></dt><dd>breakaway — release keyboard</dd></div>
+          <div><dt><kbd>Enter</kbd></dt><dd>re-arm keyboard</dd></div>
+          <div><dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>output mode</dd></div>
+          <div><dt><kbd>`</kbd></dt><dd>hide interface</dd></div>
+          <div><kbd>F11</kbd><dd>fullscreen</dd></div>
+        </dl>
+      </fieldset>
+    </div>
+  </aside>
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

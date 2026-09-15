@@ -1,0 +1,14 @@
+{
+  "name": "prism-synesthesia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PRISM — a synesthesia mapping engine that turns MIDI, microphone and computer-keyboard performance into real-time light using the Circle of Fifths.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node tests/theory.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0"
+  }
+}
