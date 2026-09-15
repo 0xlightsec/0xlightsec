@@ -79,9 +79,15 @@ on-screen keys stay playable with the mouse either way.
 
 ## Output modes
 
-- **Crystal** — a faceted structure; one shard per note at its position on the
-  circle. Consonance pulls the shards into a tight gem, dissonance throws them
-  outward. Lines between tips show which intervals are actually sounding.
+- **Crystal** — a cluster of long gemstones lit from within, one per note, growing
+  from a common seed at its position on the circle. Each stone is built in four
+  passes: the light escaping into the air around it, a dense saturated body clipped
+  to the silhouette, an elongated inner light down its spine that falls off before
+  it reaches the faces (so the shoulders stay dark and the stone reads as lit from
+  inside rather than simply bright), then the prism facets and rim. Consonance keeps
+  the cluster short, tight and near-parallel in one hue family; dissonance grows the
+  stones longer and splays them apart into distinct hues. Filaments between the
+  terminations show which intervals are actually sounding.
 - **Field** — full-screen colour. Consonant lobes stack and merge into a single
   wash; dissonant ones separate into distinct zones.
 - **Prism** — particles fired along each note's angle, scatter widening with tension.

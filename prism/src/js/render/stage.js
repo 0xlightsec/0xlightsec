@@ -148,118 +148,64 @@ export class Stage {
     const cx = this.width / 2;
     const cy = this.height / 2;
     const minDim = Math.min(this.width, this.height);
-    const R = minDim * 0.34;
+    // Longest a crystal can reach is R * 1.18 (root + length at full velocity and
+    // tension), so this keeps the cluster inside the frame at any chord.
+    const R = minDim * 0.38;
     const rotDeg = this.rotation * 57.2958;
     const tension = this.smoothTension;
 
-    const shards = [];
+    const gems = [];
 
     for (const v of voices) {
       const color = analysis.colors.get(v.midi);
       if (!color || v.env < 0.002) continue;
-      const angle = circleAngle(v.pc, rotDeg) + ((v.midi - 60) / 36) * 0.04;
-      // Consonance hugs the core; dissonance pushes the shards out.
-      const inner = R * lerp(0.18, 0.58, tension) * (0.7 + 0.3 * v.env);
-      const reach = R * lerp(0.55, 1.05, v.velocity) * (0.35 + 0.65 * v.env);
-      const outer = inner + reach;
-      const halfWidth = R * 0.095 * (0.45 + v.velocity) * (0.4 + 0.6 * v.env);
-      const shoulder = inner + reach * 0.3;
 
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      shards.push({
+      const angle = circleAngle(v.pc, rotDeg) + ((v.midi - 60) / 36) * 0.05;
+      // Consonance keeps the cluster tight around the seed; dissonance pushes the
+      // crystals out and lets them grow longer.
+      const root = R * lerp(0.10, 0.28, tension) * (0.6 + 0.4 * v.env);
+      const length = R * lerp(0.48, 0.82, v.velocity) * lerp(0.9, 1.1, tension) * (0.3 + 0.7 * v.env);
+      const halfWidth = R * 0.105 * (0.6 + 0.4 * v.velocity) * (0.5 + 0.5 * v.env);
+      // Terminations stay in proportion, so the shaft is never all point.
+      const cap = Math.min(length * 0.22, halfWidth * 2.0);
+
+      gems.push({
         color,
-        env: v.env,
+        env: clamp(v.env),
+        velocity: v.velocity,
         angle,
         halfWidth,
-        base: { x: cx + cos * inner, y: cy + sin * inner },
-        tip: { x: cx + cos * outer, y: cy + sin * outer },
-        left: { x: cx + cos * shoulder - sin * halfWidth, y: cy + sin * shoulder + cos * halfWidth },
-        right: { x: cx + cos * shoulder + sin * halfWidth, y: cy + sin * shoulder - cos * halfWidth }
+        length,
+        cap,
+        phase: v.pc * 1.7,
+        // Midpoint of the shaft, in screen space.
+        mx: cx + Math.cos(angle) * (root + length / 2),
+        my: cy + Math.sin(angle) * (root + length / 2),
+        tip: { x: cx + Math.cos(angle) * (root + length), y: cy + Math.sin(angle) * (root + length) },
+        base: { x: cx + Math.cos(angle) * root, y: cy + Math.sin(angle) * root }
       });
     }
 
-    // Facet bodies are drawn opaque so the geometry stays crisp; only the light
-    // (glows, lattice, core bloom) is added on top.
-    ctx.globalCompositeOperation = 'source-over';
-    for (const s of shards) {
-      const a = clamp(s.env);
-      const lit = { ...s.color, l: clamp(s.color.l + 0.16, 0, 0.96) };
-      const shade = { ...s.color, s: clamp(s.color.s * 1.05, 0, 1), l: clamp(s.color.l * 0.46, 0.03, 0.9) };
+    for (const gem of gems) this.drawGem(gem);
 
-      // Two facets meeting along the spine read as a cut edge catching the light.
-      const gl = ctx.createLinearGradient(s.base.x, s.base.y, s.tip.x, s.tip.y);
-      gl.addColorStop(0, css(lit, a * 0.95));
-      gl.addColorStop(1, css(lit, a * 0.18));
-      ctx.fillStyle = gl;
-      ctx.beginPath();
-      ctx.moveTo(s.base.x, s.base.y);
-      ctx.lineTo(s.left.x, s.left.y);
-      ctx.lineTo(s.tip.x, s.tip.y);
-      ctx.closePath();
-      ctx.fill();
-
-      const gr = ctx.createLinearGradient(s.base.x, s.base.y, s.tip.x, s.tip.y);
-      gr.addColorStop(0, css(shade, a * 0.95));
-      gr.addColorStop(1, css(shade, a * 0.16));
-      ctx.fillStyle = gr;
-      ctx.beginPath();
-      ctx.moveTo(s.base.x, s.base.y);
-      ctx.lineTo(s.right.x, s.right.y);
-      ctx.lineTo(s.tip.x, s.tip.y);
-      ctx.closePath();
-      ctx.fill();
-
-      // Crisp outline + the spine where the two facets meet.
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = css({ ...s.color, s: s.color.s * 0.7, l: clamp(s.color.l + 0.3, 0, 0.98) }, a * 0.75);
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(s.base.x, s.base.y);
-      ctx.lineTo(s.left.x, s.left.y);
-      ctx.lineTo(s.tip.x, s.tip.y);
-      ctx.lineTo(s.right.x, s.right.y);
-      ctx.closePath();
-      ctx.stroke();
-
-      ctx.strokeStyle = css({ ...s.color, s: s.color.s * 0.35, l: clamp(s.color.l + 0.4, 0, 0.99) }, a * 0.6);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(s.base.x, s.base.y);
-      ctx.lineTo(s.tip.x, s.tip.y);
-      ctx.stroke();
-    }
-
-    ctx.globalCompositeOperation = 'lighter';
-
-    // A tight spark at each tip rather than a wide haze.
-    for (const s of shards) {
-      const r = s.halfWidth * 1.5 + 4;
-      const halo = ctx.createRadialGradient(s.tip.x, s.tip.y, 0, s.tip.x, s.tip.y, r);
-      halo.addColorStop(0, css({ ...s.color, s: s.color.s * 0.5, l: 0.85 }, clamp(s.env) * 0.7 * this.brightness));
-      halo.addColorStop(1, css(s.color, 0));
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(s.tip.x, s.tip.y, r, 0, TAU);
-      ctx.fill();
-    }
-
-    if (shards.length > 1) {
+    if (gems.length > 1) {
       // Interval lattice: the closer two notes sit on the circle, the stronger the
-      // bond drawn between their tips.
-      for (let i = 0; i < shards.length; i++) {
-        for (let j = i + 1; j < shards.length; j++) {
-          const p = shards[i];
-          const q = shards[j];
+      // filament of light strung between their tips.
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < gems.length; i++) {
+        for (let j = i + 1; j < gems.length; j++) {
+          const p = gems[i];
+          const q = gems[j];
           const d = Math.abs(p.angle - q.angle);
           const sep = Math.min(d, TAU - d) / Math.PI; // 0 = same, 1 = opposite
           const strength = (1 - sep) * Math.min(p.env, q.env);
           if (strength < 0.04) continue;
           const g = ctx.createLinearGradient(p.tip.x, p.tip.y, q.tip.x, q.tip.y);
-          g.addColorStop(0, css(p.color, strength * 0.45));
-          g.addColorStop(1, css(q.color, strength * 0.45));
+          g.addColorStop(0, css(p.color, strength * 0.26));
+          g.addColorStop(0.5, css(p.color, strength * 0.05));
+          g.addColorStop(1, css(q.color, strength * 0.26));
           ctx.strokeStyle = g;
-          ctx.lineWidth = 0.6 + strength * 2.2;
+          ctx.lineWidth = 0.5 + strength * 1.8;
           ctx.beginPath();
           ctx.moveTo(p.tip.x, p.tip.y);
           ctx.lineTo(q.tip.x, q.tip.y);
@@ -268,40 +214,157 @@ export class Stage {
       }
     }
 
-    if (shards.length) {
-      const centroid = { h: analysis.centroidHue, s: lerp(0.12, 0.78, tension), l: 0.66 };
-
-      if (shards.length > 1) {
-        // The core: a polygon through the shard bases, tinted by the chord centroid.
-        ctx.globalCompositeOperation = 'source-over';
-        const ordered = [...shards].sort((a, b) => a.angle - b.angle);
-        ctx.beginPath();
-        ordered.forEach((s, i) => (i === 0 ? ctx.moveTo(s.base.x, s.base.y) : ctx.lineTo(s.base.x, s.base.y)));
-        ctx.closePath();
-        // Graded rather than flat, so the core reads as translucent gem body.
-        const body = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * lerp(0.18, 0.58, tension));
-        body.addColorStop(0, css(centroid, 0.13 + this.smoothEnergy * 0.16));
-        body.addColorStop(1, css(centroid, 0.02));
-        ctx.fillStyle = body;
-        ctx.fill();
-        ctx.strokeStyle = css({ ...centroid, l: 0.8 }, 0.3);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.globalCompositeOperation = 'lighter';
-      }
-
-      // Sized from the same inner radius the shard bases use, so the glow reads as
-      // the heart of the crystal rather than a blob floating behind it.
-      const pulse = R * lerp(0.18, 0.58, tension) * (0.55 + this.smoothEnergy * 0.5);
-      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulse * 1.6);
-      core.addColorStop(0, css({ ...centroid, l: 0.82 }, 0.55 * this.brightness));
-      core.addColorStop(0.4, css(centroid, 0.16 * this.brightness));
+    if (gems.length) {
+      // The seed the cluster grows out of, tinted by the chord's blended colour.
+      const centroid = { h: analysis.centroidHue, s: lerp(0.12, 0.8, tension), l: 0.7 };
+      const seed = R * lerp(0.10, 0.26, tension) * (0.55 + this.smoothEnergy * 0.55);
+      ctx.globalCompositeOperation = 'lighter';
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, seed);
+      core.addColorStop(0, css({ ...centroid, s: centroid.s * 0.5, l: 0.88 }, 0.55 * this.brightness));
+      core.addColorStop(0.35, css(centroid, 0.22 * this.brightness));
       core.addColorStop(1, css(centroid, 0));
       ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(cx, cy, pulse * 1.6, 0, TAU);
+      ctx.arc(cx, cy, seed, 0, TAU);
       ctx.fill();
     }
+
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * One crystal: a long shaft with pointed terminations at both ends, lit from
+   * inside. Built in four passes — the light escaping into the air, the dense body,
+   * the inner light along its spine, then the cut facets and rim.
+   */
+  drawGem(gem) {
+    const ctx = this.ctx;
+    const { color, env, halfWidth: w, length, cap } = gem;
+    const half = length / 2;
+    const shaft = Math.max(half - cap, half * 0.08); // where the terminations begin
+    const a = env;
+
+    const body = { h: color.h, s: clamp(color.s * 1.15, 0, 1), l: clamp(color.l * 0.36, 0.04, 0.55) };
+    const inner = { h: color.h, s: clamp(color.s * 0.85, 0, 1), l: clamp(color.l + 0.16, 0, 0.9) };
+    const flare = { h: color.h, s: clamp(color.s * 0.5, 0, 1), l: clamp(color.l + 0.36, 0, 0.95) };
+    const rim = { h: color.h, s: clamp(color.s * 0.75, 0, 1), l: clamp(color.l + 0.22, 0, 0.88) };
+
+    // Slow breathing so the light inside never looks like a static fill.
+    const pulse = 0.85 + Math.sin(this.time * 1.6 + gem.phase) * 0.15;
+
+    ctx.save();
+    ctx.translate(gem.mx, gem.my);
+    ctx.rotate(gem.angle);
+    // Local space: the crystal runs along +/-x, its width along +/-y.
+
+    // 1. Light escaping into the air around the crystal.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.save();
+    ctx.scale(half + w * 3, w * 3.4);
+    const bloom = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    bloom.addColorStop(0, css(inner, 0.22 * a * pulse * this.brightness));
+    bloom.addColorStop(0.45, css(color, 0.08 * a * this.brightness));
+    bloom.addColorStop(1, css(color, 0));
+    ctx.fillStyle = bloom;
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
+
+    const outline = () => {
+      ctx.beginPath();
+      ctx.moveTo(-half, 0);        // lower termination point
+      ctx.lineTo(-shaft, -w);
+      ctx.lineTo(shaft, -w);
+      ctx.lineTo(half, 0);         // upper termination point
+      ctx.lineTo(shaft, w);
+      ctx.lineTo(-shaft, w);
+      ctx.closePath();
+    };
+
+    ctx.save();
+    outline();
+    ctx.clip();
+
+    // 2. Dense body, so the crystal reads as material rather than a glow.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = css(body, 0.92 * a);
+    ctx.fillRect(-half, -w, length, w * 2);
+
+    // 3. The light inside: an elongated core down the spine, falling off toward the
+    //    faces, plus a hotter pool at the rooted end where the cluster is brightest.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.save();
+    ctx.scale(half * 0.76, w * 0.62);
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    core.addColorStop(0, css(flare, 0.72 * a * pulse * this.brightness));
+    core.addColorStop(0.35, css(inner, 0.4 * a * pulse * this.brightness));
+    core.addColorStop(1, css(inner, 0));
+    ctx.fillStyle = core;
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
+
+    const spine = ctx.createLinearGradient(-half, 0, half, 0);
+    spine.addColorStop(0, css(flare, 0.34 * a * this.brightness));
+    spine.addColorStop(0.4, css(inner, 0.10 * a * this.brightness));
+    spine.addColorStop(1, css(inner, 0.03 * a * this.brightness));
+    ctx.fillStyle = spine;
+    ctx.fillRect(-half, -w * 0.20, length, w * 0.40);
+
+    // 4. Prism faces: two longitudinal strips catching light at different angles.
+    ctx.globalCompositeOperation = 'source-over';
+    const faceLit = ctx.createLinearGradient(0, -w, 0, 0);
+    faceLit.addColorStop(0, css(rim, 0.20 * a));
+    faceLit.addColorStop(1, css(rim, 0));
+    ctx.fillStyle = faceLit;
+    ctx.fillRect(-half, -w, length, w);
+
+    const faceShade = ctx.createLinearGradient(0, w * 0.25, 0, w);
+    faceShade.addColorStop(0, 'rgba(0,0,0,0)');
+    faceShade.addColorStop(1, `rgba(0,0,0,${(0.34 * a).toFixed(3)})`);
+    ctx.fillStyle = faceShade;
+    ctx.fillRect(-half, w * 0.25, length, w * 0.75);
+
+    ctx.restore(); // drop the clip
+
+    // Facet edges and the rim that catches the light.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineJoin = 'round';
+
+    ctx.strokeStyle = css(rim, 0.34 * a);
+    ctx.lineWidth = 1;
+    outline();
+    ctx.stroke();
+
+    ctx.globalCompositeOperation = 'lighter';
+
+    // The two edges where the prism faces meet, and the termination seams.
+    ctx.strokeStyle = css(rim, 0.15 * a);
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-shaft, -w * 0.3);
+    ctx.lineTo(shaft, -w * 0.3);
+    ctx.moveTo(-shaft, w * 0.3);
+    ctx.lineTo(shaft, w * 0.3);
+    ctx.moveTo(half, 0);
+    ctx.lineTo(shaft, -w * 0.3);
+    ctx.moveTo(half, 0);
+    ctx.lineTo(shaft, w * 0.3);
+    ctx.moveTo(-half, 0);
+    ctx.lineTo(-shaft, -w * 0.3);
+    ctx.moveTo(-half, 0);
+    ctx.lineTo(-shaft, w * 0.3);
+    ctx.stroke();
+
+    // A single glint where the outward termination catches the light.
+    const glint = w * 0.8;
+    const g = ctx.createRadialGradient(half - glint * 0.5, 0, 0, half - glint * 0.5, 0, glint);
+    g.addColorStop(0, css(inner, 0.34 * a * pulse * this.brightness));
+    g.addColorStop(1, css(inner, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(half - glint * 0.4, 0, glint, 0, TAU);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   /* ------------------------------- field ------------------------------- */
