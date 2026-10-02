@@ -16,6 +16,7 @@ const DIV_X = 10;
 const DIV_Y = 8;
 export const CHANNEL_HUE = { 1: 52, 2: 186 }; // the usual scope colours: CH1 yellow, CH2 cyan
 const XY_HUE = 40;
+const MUSIC_HUE = 128; // P31 green, the phosphor oscilloscope music is usually shown on
 const TRIGGER_DIV = 1; // trigger point sits one division in from the left
 const STATUS_BAND = 34; // px kept clear above and below the graticule
 
@@ -254,6 +255,46 @@ export class ScopeDisplay {
     b.rect(this.left, this.top, this.sw, this.sh);
     b.clip();
     beam(b, path, CHANNEL_HUE[ch.id], intensity);
+    b.restore();
+  }
+
+  /**
+   * Oscilloscope music: left channel on X, right on Y, full scale filling the
+   * screen height. A CRT beam is dim where it moves fast, so the jumps between the
+   * parts of a picture almost vanish while the slow strokes burn bright. Each
+   * segment is drawn in one of three brightness bands by its length, as continuous
+   * runs that only break where the band changes.
+   */
+  drawMusic(left, right, count, intensity) {
+    const n = Math.min(count, left.length - 1);
+    const from = left.length - n;
+    const scale = this.divY * 3.8;
+    const bands = [new Path2D(), new Path2D(), new Path2D()];
+    const slow = Math.max(1.5, this.divY * 0.04);
+    const fast = Math.max(8, this.divY * 0.3);
+    let px = this.cx + left[from] * scale;
+    let py = this.cy - right[from] * scale;
+    let current = -1;
+    for (let i = from + 1; i < left.length; i++) {
+      const x = this.cx + left[i] * scale;
+      const y = this.cy - right[i] * scale;
+      const d = Math.hypot(x - px, y - py);
+      const band = d < slow ? 0 : d < fast ? 1 : 2;
+      if (band !== current) {
+        bands[band].moveTo(px, py);
+        current = band;
+      }
+      bands[band].lineTo(x, y);
+      px = x;
+      py = y;
+    }
+    const b = this.bctx;
+    b.save();
+    b.beginPath();
+    b.rect(this.left, this.top, this.sw, this.sh);
+    b.clip();
+    const weight = [1, 0.5, 0.1];
+    for (let k = 2; k >= 0; k--) beam(b, bands[k], MUSIC_HUE, intensity * weight[k]);
     b.restore();
   }
 

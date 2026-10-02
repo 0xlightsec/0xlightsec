@@ -1,21 +1,23 @@
 /**
  * Audio for the oscilloscope page.
  *
- * One AudioContext feeds both channels so they stay sample-aligned, which the XY
- * display depends on: any lag between them would skew the figure.
+ *   CH1    wave generator voices -> bus -> limiter -> speakers
+ *   CH2    microphone -> trim                        (never to the speakers: feedback)
+ *   music  <audio> element -> speakers               (stereo, for oscilloscope music)
  *
- *   CH1  wave generator voices -> bus -> analyser -> limiter -> speakers
- *   CH2  microphone -> analyser                    (never to the speakers: feedback)
+ * All three are captured by one AudioWorklet (capture-worklet.js), which sees
+ * every channel in the same render quantum, so X-Y and the music display stay
+ * sample-aligned. CH1 is captured before the limiter, so the trace shows the true
+ * waveform rather than what the limiter does to it.
  *
  * The generator is deliberately bare: one oscillator per note, no detune, filter
- * or reverb, so a saw on the scope is a saw. CH1's analyser sits before the limiter
- * so the trace shows the true waveform, not what the limiter does to it.
+ * or reverb, so a saw on the scope is a saw.
  */
 
 import { pianoFrequency } from '../theory/piano.js';
 
 export const WAVEFORMS = ['sine', 'triangle', 'sawtooth', 'square'];
-const FFT = 16384;               // ~340 ms at 48 kHz: room for 100 ms windows plus trigger search
+const HISTORY = 16384;           // samples kept per channel: ~340 ms at 48 kHz
 const ATTACK = 0.004;
 const RELEASE = 0.06;
 const VOICE_PEAK = 0.42;         // one note sits comfortably inside full scale
@@ -44,12 +46,6 @@ export class ScopeEngine {
     this.ctx = ctx;
 
     this.bus = ctx.createGain();
-    this.ch1 = ctx.createAnalyser();
-    this.ch2 = ctx.createAnalyser();
-    for (const a of [this.ch1, this.ch2]) {
-      a.fftSize = FFT;
-      a.smoothingTimeConstant = 0;
-    }
 
     this.limiter = ctx.createDynamicsCompressor();
     this.limiter.threshold.value = -6;
@@ -59,16 +55,30 @@ export class ScopeEngine {
     this.master = ctx.createGain();
     this.master.gain.value = this.volume;
 
-    this.bus.connect(this.ch1);
-    this.ch1.connect(this.limiter);
+    this.bus.connect(this.limiter);
     this.limiter.connect(this.master);
     this.master.connect(ctx.destination);
 
     this.trim = ctx.createGain();
-    this.trim.connect(this.ch2);
 
-    this.buf1 = new Float32Array(FFT);
-    this.buf2 = new Float32Array(FFT);
+    // Ring buffers the worklet fills, and the linear copies the display reads.
+    this.rings = [0, 1, 2, 3].map(() => new Float32Array(HISTORY));
+    this.write = 0;
+    this.buf1 = new Float32Array(HISTORY);
+    this.buf2 = new Float32Array(HISTORY);
+    this.bufL = new Float32Array(HISTORY);
+    this.bufR = new Float32Array(HISTORY);
+
+    this.ready = ctx.audioWorklet.addModule(new URL('./capture-worklet.js', import.meta.url)).then(() => {
+      const node = new AudioWorkletNode(ctx, 'prism-capture', { numberOfInputs: 3, numberOfOutputs: 1, outputChannelCount: [1] });
+      node.port.onmessage = (e) => this.receive(e.data);
+      // Its output is silent; connecting it keeps the node pulled by the graph.
+      node.connect(ctx.destination);
+      this.bus.connect(node, 0, 0);
+      this.trim.connect(node, 0, 1);
+      this.musicSource?.connect(node, 0, 2);
+      this.captureNode = node;
+    });
     return ctx;
   }
 
@@ -148,11 +158,71 @@ export class ScopeEngine {
     this.micOn = false;
   }
 
-  /** Refresh both channel buffers from the analysers. */
-  capture() {
+  /** A block of aligned samples from the worklet: [ch1, ch2, left, right]. */
+  receive(blocks) {
+    const n = blocks[0].length;
+    for (let c = 0; c < 4; c++) {
+      const ring = this.rings[c];
+      const block = blocks[c];
+      const first = Math.min(n, HISTORY - this.write);
+      ring.set(block.subarray(0, first), this.write);
+      if (first < n) ring.set(block.subarray(first), 0);
+    }
+    this.write = (this.write + n) % HISTORY;
+  }
+
+  /** Copy the rings, oldest sample first, into the buffers the display reads. */
+  snapshot() {
     if (!this.ctx) return false;
-    this.ch1.getFloatTimeDomainData(this.buf1);
-    this.ch2.getFloatTimeDomainData(this.buf2);
+    const w = this.write;
+    const targets = [this.buf1, this.buf2, this.bufL, this.bufR];
+    for (let c = 0; c < 4; c++) {
+      const ring = this.rings[c];
+      targets[c].set(ring.subarray(w), 0);
+      targets[c].set(ring.subarray(0, w), HISTORY - w);
+    }
     return true;
+  }
+
+  /* ------------------------------ music player ----------------------------- */
+
+  /** Play an audio file; its left channel drives X and its right drives Y. */
+  async loadMusic(file) {
+    const ctx = this.ensure();
+    if (!this.player) {
+      this.player = new Audio();
+      this.player.preload = 'auto';
+      this.musicSource = ctx.createMediaElementSource(this.player);
+      // Straight to the volume control: music is mastered already and must not
+      // be squashed by the generator's limiter.
+      this.musicSource.connect(this.master);
+      if (this.captureNode) this.musicSource.connect(this.captureNode, 0, 2);
+    }
+    if (this.musicUrl) URL.revokeObjectURL(this.musicUrl);
+    this.musicUrl = URL.createObjectURL(file);
+    this.musicName = file.name;
+    this.player.src = this.musicUrl;
+    await this.ready;
+    try {
+      await this.player.play();
+      return true;
+    } catch (err) {
+      this.musicError = err?.message ?? 'could not play this file';
+      return false;
+    }
+  }
+
+  get musicPlaying() {
+    return !!this.player && !this.player.paused && !this.player.ended;
+  }
+
+  toggleMusic() {
+    if (!this.player?.src) return;
+    if (this.player.paused) this.player.play();
+    else this.player.pause();
+  }
+
+  seekMusic(fraction) {
+    if (this.player?.duration) this.player.currentTime = fraction * this.player.duration;
   }
 }

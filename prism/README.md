@@ -85,17 +85,35 @@ readout below.
   on a slow timebase shows as a band rather than a false squiggle.
 - **X–Y** plots the wave across against your voice up: hold a sine and sing a
   fifth above it and you draw the 3 : 2 Lissajous yourself.
+- **Music** plays an audio file with its left channel on X and right on Y, on
+  green P31-style phosphor. Tracks made for oscilloscopes draw pictures this way.
+  Drop a file on the screen or use **Open audio…**. Like a real CRT, the beam is
+  dim where it moves fast, so the jumps between parts of a picture nearly vanish
+  while the slow strokes burn bright.
 - **Readout**: the note, frequency, peak-to-peak and RMS level of the wave; the
   pitch, cents, level and clarity of your voice; and, between them, the interval
   your voice makes with the wave, its just ratio, and how many cents you are off
   it, on a tuning meter.
-- **Run / Stop** (space) freezes the capture; timebase and scale still apply to the
-  frozen frame. **Autoset** fits both channels and the timebase to the signal.
+- **Run / Stop** (space) freezes the capture — pixel for pixel, in every view;
+  timebase and scale still apply to the frozen frame. **Autoset** fits both channels and the timebase to the signal.
 
-Both channels share one audio context, so they stay sample-aligned for X–Y. The
-microphone is captured raw — echo cancellation, noise suppression and auto-gain
+All channels — wave, voice and both sides of the music — are captured by one
+AudioWorklet on the audio thread, which sees them in the same 128-sample block, so
+they are sample-aligned by construction. (Reading separate AnalyserNodes one after
+the other was measured coming back 512 samples apart; for X–Y and oscilloscope
+music that scrambles the picture.) The microphone is captured raw — echo cancellation, noise suppression and auto-gain
 all reshape the waveform — and never routed to the speakers. Use headphones, or
 the mic will hear the generator too.
+
+## Security
+
+The Electron shell is locked down along Electron's security checklist: the
+renderer is sandboxed with context isolation and no Node; the microphone (audio
+only, never the camera) and MIDI are granted only to the app's own pages; the
+window can't navigate outside the app, and only an explicit https link reaches
+your browser; `<webview>` is refused; window-control messages are accepted only
+from the app's own top-level page; and every response carries a strict
+Content-Security-Policy. The rules live in `security.js` and are unit-tested.
 
 ## Input
 
@@ -154,12 +172,13 @@ waveform, volume, reverb and release. Settings persist between sessions.
 ## Layout
 
 ```
-main.js                 Electron main — window, custom prism:// scheme, permissions
+main.js                 Electron main — window, prism:// scheme, guards
+security.js             URL, file and permission rules (Electron-free, tested)
 preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
-src/js/scope/           engine.js · display.js · measure.js · app.js   (oscilloscope page)
+src/js/scope/           engine.js · capture-worklet.js · display.js · measure.js · app.js
 src/js/chrome.js        window chrome shared by both pages
 src/js/app.js           wiring
 tests/theory.test.mjs   npm test
@@ -168,7 +187,8 @@ tests/theory.test.mjs   npm test
 `npm test` covers the wheel arithmetic, the tension ordering above, the
 consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
 ratios, the piano tuning curve, that each figure spins at its real beat rate, and
-the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS.
+the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, and the
+main process's URL, path and permission rules.
 
 The piano model's treble asymptote and octave-type curve are the paper's fitted
 values; its bass asymptote and transition width are fitted per instrument there, so

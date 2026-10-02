@@ -57,6 +57,8 @@ let lastPitchAt = 0;
 let lastReadoutAt = 0;
 let triggered = false;
 let autoTrigger = 1;
+let shapePlan = [];
+let musicCount = 1024;
 /** Volts per division Shapes is currently using for each channel (auto-fit). */
 const fitScale = { 1: 0.2, 2: 0.05 };
 const FIT_RADIUS = { single: 3.3, pair: 2.1 }; // divisions from centre to the shape's edge
@@ -155,10 +157,12 @@ function renderStatus() {
   $('stRun').textContent = running ? 'RUN' : 'STOP';
   $('stRun').classList.toggle('is-stopped', !running);
   $('runBtn').classList.toggle('is-stopped', !running);
-  $('stMode').textContent = { shapes: 'SHAPES', xy: 'X–Y', yt: 'Y–T' }[settings.display];
+  $('stMode').textContent = { shapes: 'SHAPES', xy: 'X–Y', yt: 'Y–T', music: 'MUSIC' }[settings.display];
+  $('stTime').hidden = settings.display === 'music';
   const fit = settings.display === 'shapes';
-  $('stCh1').textContent = `CH1 ${fit ? 'FIT' : fmtV(VOLTS[settings.ch1])}`;
-  $('stCh2').textContent = `CH2 ${fit ? 'FIT' : fmtV(VOLTS[settings.ch2])}`;
+  const music = settings.display === 'music';
+  $('stCh1').textContent = music ? 'L → X' : `CH1 ${fit ? 'FIT' : fmtV(VOLTS[settings.ch1])}`;
+  $('stCh2').textContent = music ? 'R → Y' : `CH2 ${fit ? 'FIT' : fmtV(VOLTS[settings.ch2])}`;
   $('stTime').textContent = `M ${fmtT(TIMES[settings.time])}`;
   $('ch1Scale').textContent = fmtV(VOLTS[settings.ch1]);
   $('ch2Scale').textContent = fmtV(VOLTS[settings.ch2]);
@@ -250,9 +254,13 @@ function renderInterval(held, live) {
 
 /* ---------------------------------- loop ---------------------------------- */
 
+let lastFrame = performance.now();
+
 function frame(now) {
+  const dt = Math.min((now - lastFrame) / 1000, 0.1);
+  lastFrame = now;
   display.resize();
-  if (running) engine.capture();
+  if (running) engine.snapshot();
   if (engine.ctx && running) trackVoice(now);
 
   display.fade(settings.persist);
@@ -264,22 +272,40 @@ function frame(now) {
     const ch1 = { id: 1, buf: engine.buf1, voltsPerDiv: VOLTS[settings.ch1], position: CH_POSITION[1], visible: true };
     const ch2 = { id: 2, buf: engine.buf2, voltsPerDiv: VOLTS[settings.ch2], position: CH_POSITION[2], visible: engine.micOn };
 
-    if (settings.display === 'shapes') {
+    if (settings.display === 'music') {
+      // Draw the samples that arrived since the last frame, with a little overlap,
+      // and nothing while the music is silent: a parked beam would burn a dot.
+      // The window follows the frame time, so it is frozen with the capture.
+      if (running) musicCount = Math.round(clamp(dt * sr * 1.3, 256, 8192));
+      const n = engine.bufL.length;
+      if (rms(engine.bufL, n - musicCount, n) + rms(engine.bufR, n - musicCount, n) > 0.002) {
+        display.drawMusic(engine.bufL, engine.bufR, musicCount, 1);
+      }
+      triggered = false;
+    } else if (settings.display === 'shapes') {
       // Each channel draws against itself a quarter of its own period later. The
       // period comes from what we know: the lowest held note, the tracked voice
       // pitch, or a short fixed delay when neither is known yet.
-      const sr = engine.sampleRate;
-      const held = engine.held;
-      const live = voiceLive(now);
-      const shapes = [];
-      if (held.length) shapes.push([ch1, sr / (4 * pianoFrequency(held[0]))]);
-      if (engine.micOn && (live || rms(engine.buf2, engine.buf2.length - PITCH_WINDOW) > VOICE_GATE)) {
-        shapes.push([ch2, live ? sr / (4 * voice.hz) : sr * 0.0006]);
+      // Like the trigger, the plan is only revised while running: a stopped frame
+      // must not change because a key was pressed or the voice fell silent after.
+      if (running) {
+        const sr = engine.sampleRate;
+        const held = engine.held;
+        const live = voiceLive(now);
+        shapePlan = [];
+        if (held.length) shapePlan.push({ id: 1, delay: sr / (4 * pianoFrequency(held[0])) });
+        if (engine.micOn && (live || rms(engine.buf2, engine.buf2.length - PITCH_WINDOW) > VOICE_GATE)) {
+          shapePlan.push({ id: 2, delay: live ? sr / (4 * voice.hz) : sr * 0.0006 });
+        }
       }
-      const offsets = shapes.length === 2 ? [-2.5, 2.5] : [0];
-      const radius = shapes.length === 2 ? FIT_RADIUS.pair : FIT_RADIUS.single;
+      const offsets = shapePlan.length === 2 ? [-2.5, 2.5] : [0];
+      const radius = shapePlan.length === 2 ? FIT_RADIUS.pair : FIT_RADIUS.single;
       const count = Math.round(span);
-      shapes.forEach(([ch, delay], i) => display.drawShape(fitted(ch, count, radius), delay, count, offsets[i], 1));
+      shapePlan.forEach(({ id, delay }, i) => {
+        const ch = id === 1 ? ch1 : ch2;
+        const scaled = running ? fitted(ch, count, radius) : { ...ch, voltsPerDiv: fitScale[id] };
+        display.drawShape(scaled, delay, count, offsets[i], 1);
+      });
       triggered = false;
     } else if (settings.display === 'xy') {
       display.drawXY(ch1, ch2, Math.round(span), 1);
@@ -322,7 +348,12 @@ function frame(now) {
   if (now - lastReadoutAt > 80) {
     lastReadoutAt = now;
     if (engine.ctx) renderReadout(now, span);
-    $('scopeHint').classList.toggle('is-hidden', engine.voices.size > 0 || engine.micOn);
+    const music = settings.display === 'music';
+    $('scopeHint').innerHTML = music
+      ? 'Drop a stereo audio file here, or <b>Open audio…</b> — files made for oscilloscopes draw pictures'
+      : "Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing";
+    $('scopeHint').classList.toggle('is-hidden', music ? !!engine.musicName : engine.voices.size > 0 || engine.micOn);
+    renderPlayer();
   }
 
   requestAnimationFrame(frame);
@@ -352,7 +383,8 @@ function setDisplay(mode) {
     b.setAttribute('aria-selected', String(on));
   }
   display.clear();
-  $('xyNote').hidden = mode === 'yt';
+  $('xyNote').hidden = mode === 'yt' || mode === 'music';
+  $('player').hidden = mode !== 'music';
   $('xyNote').textContent = mode === 'xy'
     ? 'CH1 → X · CH2 → Y · a sine on CH1 draws Lissajous figures'
     : 'each channel against itself ¼ period later · sine ○ · square □ · triangle ◇';
@@ -466,7 +498,65 @@ function wire() {
     else if (e.code === 'Digit1') setDisplay('shapes');
     else if (e.code === 'Digit2') setDisplay('yt');
     else if (e.code === 'Digit3') setDisplay('xy');
+    else if (e.code === 'Digit4') setDisplay('music');
     else if (e.code === 'F11') { e.preventDefault(); window.prism?.toggleFullscreen(); }
+  });
+}
+
+/* ------------------------------- music player ------------------------------ */
+
+const AUDIO_EXT = /\.(wav|flac|mp3|ogg|oga|opus|m4a|aac|webm)$/i;
+let seeking = false;
+
+async function playFile(file) {
+  if (!file) return;
+  if (!(file.type.startsWith('audio/') || AUDIO_EXT.test(file.name))) {
+    $('musicName').textContent = `${file.name} isn't an audio file`;
+    return;
+  }
+  setDisplay('music');
+  $('musicName').textContent = file.name;
+  const ok = await engine.loadMusic(file);
+  if (!ok) $('musicName').textContent = `Couldn't play ${file.name}`;
+}
+
+const clock = (t) => (Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : '0:00');
+
+function renderPlayer() {
+  const p = engine.player;
+  const loaded = !!(p && engine.musicName);
+  $('musicPlay').disabled = !loaded;
+  $('musicSeek').disabled = !loaded;
+  $('musicPlay').textContent = engine.musicPlaying ? 'Pause' : 'Play';
+  if (!loaded) return;
+  $('musicTime').textContent = `${clock(p.currentTime)} / ${clock(p.duration)}`;
+  if (!seeking && p.duration) $('musicSeek').value = String(Math.round((p.currentTime / p.duration) * 1000));
+}
+
+function wirePlayer() {
+  $('musicOpen').addEventListener('click', () => $('musicFile').click());
+  $('musicFile').addEventListener('change', (e) => playFile(e.target.files[0]));
+  $('musicPlay').addEventListener('click', () => { engine.toggleMusic(); renderPlayer(); });
+  $('musicSeek').addEventListener('input', () => { seeking = true; });
+  $('musicSeek').addEventListener('change', (e) => {
+    engine.seekMusic(Number(e.target.value) / 1000);
+    seeking = false;
+  });
+
+  // Dropping a file on the screen plays it. Drops anywhere else are swallowed, so
+  // a stray drop never does anything surprising.
+  const veil = $('dropVeil');
+  const main = $('scopeMain');
+  let depth = 0;
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+  main.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; veil.hidden = false; });
+  main.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) veil.hidden = true; });
+  main.addEventListener('drop', (e) => {
+    e.preventDefault();
+    depth = 0;
+    veil.hidden = true;
+    playFile(e.dataTransfer?.files?.[0]);
   });
 }
 
@@ -491,11 +581,12 @@ function save() {
 /* ---------------------------------- start ---------------------------------- */
 
 if (!WAVEFORMS.includes(settings.waveform)) settings.waveform = 'sawtooth';
-if (!['shapes', 'yt', 'xy'].includes(settings.display)) settings.display = 'shapes';
+if (!['shapes', 'yt', 'xy', 'music'].includes(settings.display)) settings.display = 'shapes';
 engine.waveform = settings.waveform;
 engine.volume = settings.volume;
 wireWindowChrome();
 wire();
+wirePlayer();
 setDisplay(settings.display);
 setLatch(settings.latch);
 renderKeyState(keys.state());
