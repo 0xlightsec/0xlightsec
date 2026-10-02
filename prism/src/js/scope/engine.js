@@ -192,6 +192,7 @@ export class ScopeEngine {
     if (!this.player) {
       this.player = new Audio();
       this.player.preload = 'auto';
+      this.player.addEventListener('ended', () => this.onMusicEnded?.());
       this.musicSource = ctx.createMediaElementSource(this.player);
       // Straight to the volume control: music is mastered already and must not
       // be squashed by the generator's limiter.

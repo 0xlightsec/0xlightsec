@@ -153,6 +153,7 @@
   backdrop-filter: blur(8px); z-index: 2;
 }
 .player .pill { min-height: 26px; padding: 3px 10px; }
+.player select { width: auto; min-width: 200px; padding: 4px 8px; font-size: 12px; min-height: 26px; }
 .player .pill:disabled { opacity: 0.4; cursor: default; }
 .player-name {
   max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

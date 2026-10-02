@@ -19,6 +19,7 @@ import { pianoFrequency } from '../theory/piano.js';
 import { ratioForSemitones, intervalTitle } from '../theory/ratios.js';
 import { nameChord } from '../theory/chords.js';
 import { wireWindowChrome, renderFocusBadge, trackFocus } from '../chrome.js';
+import { TRACKS, renderTrack, encodeWav } from './tracks.js';
 
 const $ = (id) => document.getElementById(id);
 const VOLTS = [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005];   // per division, 1-2-5 like a real scope
@@ -350,7 +351,7 @@ function frame(now) {
     if (engine.ctx) renderReadout(now, span);
     const music = settings.display === 'music';
     $('scopeHint').innerHTML = music
-      ? 'Drop a stereo audio file here, or <b>Open audio…</b> — files made for oscilloscopes draw pictures'
+      ? 'Choose a track above, or drop a stereo audio file here — files made for oscilloscopes draw pictures'
       : "Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing";
     $('scopeHint').classList.toggle('is-hidden', music ? !!engine.musicName : engine.voices.size > 0 || engine.micOn);
     renderPlayer();
@@ -508,16 +509,59 @@ function wire() {
 const AUDIO_EXT = /\.(wav|flac|mp3|ogg|oga|opus|m4a|aac|webm)$/i;
 let seeking = false;
 
+/** Files opened or dropped this session, listed under "Your files". */
+const userFiles = [];
+
 async function playFile(file) {
   if (!file) return;
   if (!(file.type.startsWith('audio/') || AUDIO_EXT.test(file.name))) {
     $('musicName').textContent = `${file.name} isn't an audio file`;
     return;
   }
+  let index = userFiles.findIndex((f) => f.name === file.name && f.size === file.size);
+  if (index < 0) {
+    userFiles.push(file);
+    index = userFiles.length - 1;
+    renderUserTracks();
+  }
+  await playTrack(`u:${index}`);
+}
+
+function renderUserTracks() {
+  const group = $('userTracks');
+  group.replaceChildren(...userFiles.map((f, i) => new Option(f.name, `u:${i}`)));
+  group.hidden = userFiles.length === 0;
+}
+
+/** Play a list entry: "t:<id>" is a built-in track, "u:<n>" one of your files. */
+async function playTrack(value) {
+  const pick = $('musicPick');
+  pick.value = value;
   setDisplay('music');
-  $('musicName').textContent = file.name;
+  let file;
+  if (value.startsWith('t:')) {
+    const track = TRACKS.find((t) => `t:${t.id}` === value);
+    $('musicName').textContent = 'generating…';
+    await new Promise((r) => requestAnimationFrame(r)); // let the label paint first
+    engine.ensure();
+    const sr = engine.sampleRate;
+    const { left, right } = renderTrack(track.id, sr);
+    file = new File([encodeWav(left, right, sr)], `${track.name}.wav`, { type: 'audio/wav' });
+    $('musicName').textContent = 'built in';
+  } else {
+    file = userFiles[Number(value.slice(2))];
+    $('musicName').textContent = file ? 'your file' : '';
+  }
+  if (!file) return;
   const ok = await engine.loadMusic(file);
-  if (!ok) $('musicName').textContent = `Couldn't play ${file.name}`;
+  if (!ok) $('musicName').textContent = `couldn't play ${file.name}`;
+}
+
+/** When a track finishes, move on to the next one in the list. */
+function playNext() {
+  const values = [...$('musicPick').querySelectorAll('optgroup:not([hidden]) option')].map((o) => o.value);
+  const at = values.indexOf($('musicPick').value);
+  if (values.length) playTrack(values[(at + 1) % values.length]);
 }
 
 const clock = (t) => (Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}` : '0:00');
@@ -534,8 +578,23 @@ function renderPlayer() {
 }
 
 function wirePlayer() {
-  $('musicOpen').addEventListener('click', () => $('musicFile').click());
-  $('musicFile').addEventListener('change', (e) => playFile(e.target.files[0]));
+  $('builtinTracks').replaceChildren(...TRACKS.map((t) => new Option(t.name, `t:${t.id}`)));
+  let current = '';
+  const pick = $('musicPick');
+  pick.addEventListener('focus', () => { current = pick.value; });
+  pick.addEventListener('change', () => {
+    if (pick.value === 'open') {
+      pick.value = current; // "Open…" is an action, not a selection
+      $('musicFile').click();
+      return;
+    }
+    playTrack(pick.value);
+  });
+  engine.onMusicEnded = playNext;
+  $('musicFile').addEventListener('change', (e) => {
+    playFile(e.target.files[0]);
+    e.target.value = ''; // so choosing the same file again still fires
+  });
   $('musicPlay').addEventListener('click', () => { engine.toggleMusic(); renderPlayer(); });
   $('musicSeek').addEventListener('input', () => { seeking = true; });
   $('musicSeek').addEventListener('change', (e) => {

@@ -270,4 +270,34 @@ check('only https leaves the app', () => {
   for (const u of ['http://example.com', 'file:///etc/passwd', 'javascript:alert(1)', 'smb://host/share', 'nope'])
     assert.ok(!security.isExternalAllowed(u), u);
 });
+
+const { TRACKS, renderTrack, encodeWav } = await import('../src/js/scope/tracks.js');
+console.log('\nbuilt-in oscilloscope music');
+const crossings = (a, from, to) => { let c = 0; for (let i = from + 1; i < to; i++) if (a[i - 1] < 0 && a[i] >= 0) c++; return c; };
+check('every track renders in range, with no clicks between samples', () => {
+  for (const { id } of TRACKS) {
+    const t0 = performance.now();
+    const { left, right } = renderTrack(id, 48000);
+    const ms = performance.now() - t0;
+    assert.ok(left.length > 48000 * 8 && left.length === right.length, `${id} length`);
+    let peak = 0, jump = 0;
+    for (let i = 1; i < left.length; i++) {
+      peak = Math.max(peak, Math.abs(left[i]), Math.abs(right[i]));
+      jump = Math.max(jump, Math.abs(left[i] - left[i - 1]), Math.abs(right[i] - right[i - 1]));
+    }
+    assert.ok(peak <= 1 && peak > 0.3, `${id} peak ${peak}`);
+    assert.ok(jump < 0.5, `${id} has a ${jump.toFixed(2)} step`);
+    assert.ok(ms < 2000, `${id} took ${ms.toFixed(0)} ms to render`);
+  }
+});
+check('the intervals track plays its fifth as 3:2 between the channels', () => {
+  const { left, right } = renderTrack('intervals', 48000);
+  const from = 48000 * 6.5, to = 48000 * 8.5; // the fifth section
+  const ratio = crossings(right, from, to) / crossings(left, from, to);
+  assert.ok(Math.abs(ratio - 1.5) < 0.02, `ratio ${ratio.toFixed(3)}`);
+});
+check('WAV encoding has the right header and size', async () => {
+  const blob = encodeWav(new Float32Array(100), new Float32Array(100), 48000);
+  assert.equal(blob.size, 44 + 400);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

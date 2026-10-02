@@ -59,7 +59,12 @@
       </div>
       <div class="scope-hint" id="scopeHint">Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing</div>
       <div class="player" id="player" hidden>
-        <button class="pill" id="musicOpen">Open audio…</button>
+        <select id="musicPick" aria-label="Track">
+          <option value="" disabled selected>Choose a track…</option>
+          <optgroup label="Built in" id="builtinTracks"></optgroup>
+          <optgroup label="Your files" id="userTracks" hidden></optgroup>
+          <option value="open">Open audio file…</option>
+        </select>
         <input type="file" id="musicFile" accept="audio/*,.wav,.flac,.mp3,.ogg,.opus,.m4a,.aac" hidden />
         <button class="pill" id="musicPlay" disabled>Play</button>
         <span class="player-name" id="musicName">or drop a stereo file on the screen</span>
