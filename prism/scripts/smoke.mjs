@@ -2,9 +2,10 @@
  * Smoke-test a packaged PRISM: node scripts/smoke.mjs <path to PRISM.exe or prism>
  *
  * Launches the real binary, drives it over the Chrome DevTools Protocol (Node's
- * built-in WebSocket, no extra dependencies) through both pages and a built-in
- * music track, saves a screenshot, and checks each Electron fuse against the
- * attack it exists to stop. Exits non-zero on any failure.
+ * built-in WebSocket, no extra dependencies) through the Studio (circles, beat and
+ * looper), the visualizer and the oscilloscope with a built-in music track, saves
+ * screenshots, and checks each Electron fuse against the attack it exists to stop.
+ * Exits non-zero on any failure.
  */
 
 import { spawn } from 'node:child_process';
@@ -94,11 +95,42 @@ async function drive() {
   const app = launch([`--remote-debugging-port=${PORT}`]);
   try {
     const { send, evaluate, waitFor, errors, close } = await cdp();
-    const loaded = await waitFor("document.readyState === 'complete' && location.href.endsWith('/index.html') && document.title");
-    check(String(loaded).startsWith('PRISM'), 'visualizer loads from the bundled archive', await evaluate('location.href'));
+    const key = async (code, keyText, vk) => {
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: keyText, windowsVirtualKeyCode: vk });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: keyText, windowsVirtualKeyCode: vk });
+    };
+    const loopState = () => evaluate("document.getElementById('loopBtn').dataset.state");
+
+    // The Studio is the front page.
+    const studio = await waitFor("document.readyState === 'complete' && location.href.endsWith('/studio.html') && document.title");
+    check(studio === 'PRISM — Studio', 'opens on the Studio, from the bundled archive', await evaluate('location.href'));
+    check((await evaluate('typeof require + typeof process')) === 'undefinedundefined', 'page has no Node access');
+    check((await waitFor("document.querySelectorAll('.key').length")) === 18, 'studio keys built');
+    const veil = await waitFor("document.getElementById('startVeil').hidden && 'running'", 8000);
+    check(veil === 'running', 'audio starts without a click');
+    // CI machines have no microphone: the page must say so, not break.
+    const mic = await waitFor("(() => { const t = document.getElementById('micState').textContent; return !t.includes('starting') && t; })()", 10000);
+    check(!!mic, 'microphone state settles', String(mic));
+    const drawn = await waitFor(`(() => { const c = document.getElementById('beam'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let lit = 0; for (let i = 3; i < d.length; i += 4 * 7) if (d[i] > 40) lit++; return lit > 200 && lit; })()`, 10000);
+    check(!!drawn, 'live circles draw (audio worklets under the CSP)', `${drawn} lit samples`);
+    await evaluate(`document.querySelector('[data-beat="pulse"]').click(), true`);
+    await key('Space', ' ', 32);
+    check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'recording' && 'recording'`, 5000)) === 'recording', 'Space starts a loop');
+    await sleep(1500);
+    await key('Space', ' ', 32);
+    check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'playing' && document.getElementById('loopLen').textContent`, 5000)) === '1 bar', 'the loop closes, snapped to a bar of the beat', await evaluate("document.getElementById('loopLen').textContent"));
+    await key('Delete', 'Delete', 46);
+    check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'empty' && 'empty'`, 5000)) === 'empty', 'Delete clears the loop', await loopState());
+    await evaluate(`document.querySelector('[data-beat=""]').click(), true`);
+    const studioShot = await send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(SHOT.replace(/\.png$/, '-studio.png'), Buffer.from(studioShot.result.data, 'base64'));
+
+    await evaluate(`document.querySelector('a.page[href="./index.html"]').click()`);
+    const loaded = await waitFor("location.href.endsWith('/index.html') && document.readyState === 'complete' && document.title");
+    check(String(loaded).startsWith('PRISM'), 'visualizer loads', String(loaded));
     const keys = await waitFor("document.querySelectorAll('.key').length");
     check(keys === 18, 'keyboard built', `${keys} keys`);
-    check((await evaluate('typeof require + typeof process')) === 'undefinedundefined', 'page has no Node access');
 
     await evaluate(`document.querySelector('a.page[href="./scope.html"]').click()`);
     const scope = await waitFor("location.href.endsWith('/scope.html') && document.readyState === 'complete' && document.getElementById('musicPick') && document.title");

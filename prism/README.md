@@ -31,6 +31,47 @@ that refuses to start couldn't be checked without a Windows machine. The app mak
 no network calls: out of the box Electron fetches spellcheck dictionaries from
 Google on every launch, and that is switched off.
 
+## Studio
+
+PRISM opens on the **Studio**: two glowing circles and everything you need to
+make a song, with no setup. The mic switches on by itself.
+
+- **Sing** and the upper-right circle follows your voice. Louder spins it faster
+  and blooms it from a circle into a flower, the note sets the number of petals
+  (one more per step around the Circle of Fifths), and a rising melody spins it one
+  way while a falling one spins it the other. The lower-left circle does the same
+  for the music: keys, loop and beat.
+- **Loop**: one button, like a loop pedal. Press `Space` to record, press again
+  and it loops, press again to add a layer, press again to keep it. `Backspace`
+  undoes the last layer and `Delete` clears everything. Loops are recorded dry and
+  played back through the effects, so turning a knob changes the whole loop live.
+- **Beat**: Pulse, Groove or Trap (`B` turns it on and off) and a tempo knob. With
+  a beat running a take snaps to 1, 2, 4 or 8 whole bars and starts on the nearest
+  downbeat, so loops always line up however sloppily you press. If you make a loop
+  first and add the beat afterwards, the tempo snaps to fit the loop instead.
+- **Sound**: Pad, Keys, Pluck, Bass and Lead (`1` to `5`). **Chords** (`C`) makes
+  every key play a whole chord that belongs to the key you're in, so nothing you
+  press can sound wrong. **Key** moves the whole keyboard; `Z` and `X` change
+  octave.
+- **Effects**: Drive (soft-clip distortion), Crush (bit crusher), Filter (a DJ
+  filter: left of centre is darker, right is thinner, centre does nothing), Echo
+  (dotted eighths, synced to the tempo) and Space (reverb). Drag, scroll or use the
+  arrow keys; double-click resets a knob.
+- **Record song** in the titlebar saves everything you hear to a file.
+
+**Headphones.** The Studio never plays your mic through the speakers, because it
+would howl. Turn on **Headphones** to hear yourself through the effects. With it
+off, the mic's echo cancellation is on, so the speakers aren't recorded into your
+loop either.
+
+**Timing.** Everything is placed on the audio clock. What the mic hears was sung
+against what played a moment earlier (the output latency to your ears plus the
+input latency back), so takes and overdubs are written that far back and layers
+never drift. Keys are delayed into the looper by the input latency, so a note you
+play lands in the same place as a note you sing. A short pre-roll is always kept,
+so pressing record just after the downbeat loses nothing, and the loop keeps
+filling after the last press until its final moment has arrived.
+
 ## How the mapping works
 
 **The wheel.** Position *k* on the Circle of Fifths holds pitch class `(7k mod 12)` —
@@ -85,7 +126,7 @@ on-screen keys stay playable with the mouse either way.
 
 ## Oscilloscope
 
-A second page (switch with **Visualizer / Oscilloscope** in the titlebar): a wave
+Another page (switch with **Studio / Visualizer / Oscilloscope** in the titlebar): a wave
 generator on CH1, your microphone on CH2, a glowing scope screen above and a
 readout below.
 
@@ -219,9 +260,11 @@ preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
+src/js/studio/          engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
+                        sounds.js · knob.js · app.js
 src/js/scope/           engine.js · capture-worklet.js · live.js · live-worklet.js ·
                         tracks.js · display.js · measure.js · app.js
-src/js/chrome.js        window chrome shared by both pages
+src/js/chrome.js        window chrome shared by every page
 src/js/app.js           wiring
 tests/theory.test.mjs   npm test
 ```
@@ -229,8 +272,9 @@ tests/theory.test.mjs   npm test
 `npm test` covers the wheel arithmetic, the tension ordering above, the
 consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
 ratios, the piano tuning curve, that each figure spins at its real beat rate, and
-the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, and the
-main process's URL, path and permission rules.
+the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
+looper's timing (latency, bar snapping, pre-roll, undo), the effect curves, the
+beat grid, chord mode, and the main process's URL, path and permission rules.
 
 The piano model's treble asymptote and octave-type curve are the paper's fitted
 values; its bass asymptote and transition width are fitted per instrument there, so

@@ -63,7 +63,10 @@ function createWindow() {
       webviewTag: false,
       navigateOnDragDrop: false,
       spellcheck: false,
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      // The Studio starts listening and playing as it opens; there is no page to
+      // "click first" in a desktop instrument.
+      autoplayPolicy: 'no-user-gesture-required'
     }
   });
 
@@ -82,7 +85,7 @@ function createWindow() {
   win.on('enter-full-screen', () => win.webContents.send('window:fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('window:fullscreen', false));
 
-  win.loadURL('prism://app/index.html');
+  win.loadURL('prism://app/studio.html');
   return win;
 }
 

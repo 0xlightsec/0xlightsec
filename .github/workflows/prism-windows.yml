@@ -47,7 +47,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smoke-screenshot
-          path: prism/smoke-windows.png
+          path: |
+            prism/smoke-windows.png
+            prism/smoke-windows-studio.png
           if-no-files-found: ignore
           retention-days: 14
 

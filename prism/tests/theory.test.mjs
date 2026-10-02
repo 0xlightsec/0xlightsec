@@ -346,4 +346,148 @@ check('rendered circles stay on screen, never click, and sit at their two centre
   const low = [...L].filter((x) => x < 0).length / n;
   assert.ok(low > 0.35 && low < 0.65, `time split between circles ${low.toFixed(2)}`);
 });
+
+const { LoopCore } = await import('../src/js/studio/looper.js');
+console.log('\nlooper');
+const run = (core, seconds, signal = () => 0) => {
+  const n = Math.round(core.sr * seconds), out = new Float32Array(n), inp = new Float32Array(n);
+  for (let i = 0; i < n; i++) inp[i] = signal(i);
+  for (let i = 0; i < n; i += 128) core.process(inp.subarray(i, Math.min(n, i + 128)), out.subarray(i, Math.min(n, i + 128)), Math.min(128, n - i));
+  return out;
+};
+check('one button: record → loop → overdub → play', () => {
+  const c = new LoopCore(8000);
+  assert.equal(c.state, 'empty'); c.press(); assert.equal(c.state, 'recording');
+  run(c, 1.0, () => 0.5); c.press();
+  assert.equal(c.state, 'playing'); assert.equal(c.length, 8000);
+  c.press(); assert.equal(c.state, 'overdub'); c.press(); assert.equal(c.state, 'playing');
+  assert.equal(c.status().layers, 2);
+});
+check('with a beat, a sloppy take snaps to whole bars (1, 2, 4 or 8)', () => {
+  const c = new LoopCore(8000);
+  c.barSamples = 8000 * 2;          // 2 s bars (120 bpm)
+  c.press(); run(c, 3.7); c.press(); // 1.85 bars -> 2 bars
+  assert.equal(c.length, 32000);
+  const d = new LoopCore(8000); d.barSamples = 16000;
+  d.press(); run(d, 1.2); d.press(); // 0.6 bars -> 1 bar
+  assert.equal(d.length, 16000);
+});
+check('playback repeats the take exactly, seamlessly', () => {
+  const c = new LoopCore(8000);
+  c.press(); run(c, 0.5, (i) => (i % 400) / 400); c.press();
+  const out = run(c, 1.0);
+  for (let i = 0; i < 8000; i++) assert.ok(Math.abs(out[i] - ((i % 400) / 400)) < 1e-6, `sample ${i}`);
+});
+check('overdubs land in time despite latency, and undo removes only the last layer', () => {
+  const c = new LoopCore(8000);
+  c.latency = 160;                                  // 20 ms round trip
+  // A click sung at loop position 1000 reaches us 160 samples later.
+  c.press(); run(c, 1.0, (i) => (i === 1000 + 160 ? 1 : 0)); c.press();
+  run(c, 160 / 8000);                               // the take's tail arrives
+  const first = run(c, 1.0);
+  const hit1 = first.indexOf(1);
+  assert.equal(hit1, 1000 - 160, `first take: click at ${hit1}`); // run began 160 into the loop
+  c.press();
+  // Overdub a click heard at loop position 3000 (this run starts at position 160).
+  run(c, 1.0, (i) => (i === 3000 - 160 + 160 ? 1 : 0));
+  c.press();
+  const both = run(c, 1.0);
+  assert.equal(both[3000 - 160], 1, 'overdub not aligned');
+  c.undo();
+  const undone = run(c, 1.0);
+  assert.equal(undone[3000 - 160], 0); assert.equal(undone[1000 - 160], 1);
+});
+check('the end of a take still arriving after the press is kept, not cut off', () => {
+  const c = new LoopCore(8000);
+  c.latency = 400;
+  // Sung right at the end of the loop, so it reaches us after the closing press.
+  c.press(); run(c, 1.0, () => 0); c.press();
+  run(c, 0.1, (i) => (i === 200 ? 1 : 0));          // musical time 8000 + 200 - 400 = 7800
+  const out = run(c, 1.0);                          // starts at loop position 800
+  assert.equal(out[(7800 - 800 + 8000) % 8000], 1);
+});
+check('with a beat, the loop starts on the downbeat even if pressed late', () => {
+  const c = new LoopCore(8000);
+  c.barSamples = 8000; c.origin = 0;                // one bar a second, downbeats at 0, 8000, …
+  run(c, 1.0);
+  run(c, 0.0375, (i) => (i === 0 ? 0.5 : i === 100 ? 1 : 0)); // notes at 8000 and 8100…
+  c.press();                                        // …but the press comes at 8300
+  run(c, 1.1625); c.press();                        // closed at 17600: 1.2 bars -> 1 bar
+  assert.equal(c.length, 8000);
+  const out = run(c, 2.0);                          // frames 17600…
+  const at = (frame) => out[frame - 17600];
+  assert.equal(at(24000), 0.5, 'the downbeat note plays on the downbeat');
+  assert.equal(at(32000), 0.5, 'and on every one after');
+  assert.equal(at(24100), 1, 'notes from before the press are kept');
+});
+check('clear empties; stop holds the loop and restarts from the top', () => {
+  const c = new LoopCore(8000);
+  c.press(); run(c, 0.5, (i) => (i === 0 ? 0.25 : 0)); c.press();
+  c.toggleStop(); assert.equal(c.state, 'stopped');
+  assert.ok(run(c, 0.2).every((v) => v === 0));
+  c.toggleStop(); assert.equal(c.state, 'playing');
+  assert.equal(run(c, 0.1)[0], 0.25, 'restarts at the top');
+  c.clear(); assert.equal(c.state, 'empty'); assert.equal(c.layers.length, 0);
+});
+
+const fx = await import('../src/js/studio/fx.js');
+const drums = await import('../src/js/studio/drums.js');
+const sounds = await import('../src/js/studio/sounds.js');
+console.log('\nstudio');
+check('every effect is silent at rest: no curve, filter wide open at centre, no echo', () => {
+  assert.equal(fx.driveCurve(0), null);
+  assert.equal(fx.crushCurve(0), null);
+  const { lp, hp } = fx.filterSetting(0.5);
+  assert.ok(lp >= 20000 && hp <= 20, `${lp} / ${hp}`);
+  assert.equal(fx.echoSetting(0).send, 0);
+});
+check('drive saturates smoothly and keeps full scale full', () => {
+  const c = fx.driveCurve(1);
+  assert.ok(Math.abs(c[c.length - 1] - 1) < 1e-6 && Math.abs(c[0] + 1) < 1e-6);
+  for (let i = 1; i < c.length; i++) assert.ok(c[i] >= c[i - 1], 'monotonic');
+  const quiet = c[Math.round((c.length - 1) * 0.55)]; // input 0.1
+  assert.ok(quiet > 0.5, `quiet input pushed up to ${quiet.toFixed(2)}`);
+});
+check('crush leaves 2^bits levels: 3 bits at full', () => {
+  assert.equal(fx.crushBits(1), 3);
+  const levels = new Set(fx.crushCurve(1));
+  assert.equal(levels.size, 2 ** 3 + 1); // −1 … +1 inclusive
+});
+check('filter: left darkens (low-pass falls), right thins (high-pass rises), both exponential', () => {
+  const l1 = fx.filterSetting(0.3).lp, l2 = fx.filterSetting(0.1).lp, l3 = fx.filterSetting(0).lp;
+  assert.ok(l1 > l2 && l2 > l3 && Math.abs(l3 - 150) < 1, `${l1} ${l2} ${l3}`);
+  const h1 = fx.filterSetting(0.7).hp, h2 = fx.filterSetting(1).hp;
+  assert.ok(h1 < h2 && Math.abs(h2 - 5000) < 1);
+  assert.equal(fx.filterSetting(0.2).hp, 10); // only one filter moves at a time
+});
+check('echo is a dotted eighth at the tempo', () => {
+  assert.ok(Math.abs(fx.echoSeconds(120) - 0.375) < 1e-9);
+});
+check('beat steps land on the sixteenth grid, each exactly once, swing pushes odd steps late', () => {
+  const bpm = 120, step = drums.stepSeconds(bpm);
+  const seen = [];
+  for (let t = 0; t < 2; t += 0.025) seen.push(...drums.stepsBetween(0.1, bpm, 0, t, t + 0.025)); // 25 ms ticks
+  assert.deepEqual(seen.map((s) => s.k), [...Array(seen.length).keys()]);
+  seen.forEach(({ k, t }) => assert.ok(Math.abs(t - (0.1 + k * step)) < 1e-9));
+  const swung = drums.stepsBetween(0, bpm, 0.2, 0, 1);
+  assert.ok(Math.abs(swung[1].t - 1.2 * step) < 1e-9 && Math.abs(swung[2].t - 2 * step) < 1e-9);
+});
+check('the beat can lock to a free loop: tempo where the loop is whole bars', () => {
+  assert.equal(drums.fitTempo(4, 100), 120);           // 4 s = 2 bars at 120
+  assert.ok(Math.abs(drums.fitTempo(3.1, 90) - 240 / 3.1) < 1e-9);
+  assert.equal(drums.fitTempo(0.5, 100), null);        // nothing sensible fits
+});
+check('every beat pattern is sixteen steps of known symbols', () => {
+  for (const [name, b] of Object.entries(drums.BEATS)) {
+    for (const part of ['kick', 'snare', 'hat']) assert.match(b[part], /^[xor.]{16}$/, `${name}.${part}`);
+  }
+});
+check('chord mode: each note of the key gets its own chord from the key', () => {
+  const names = [60, 62, 64, 65, 67, 69, 71].map((m) => sounds.chordName(sounds.chordFor(m, 0)));
+  assert.deepEqual(names, ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'B°']);
+  // In G, the white-key shapes move with the key: G A B C D E F♯.
+  const inG = [67, 69, 71, 72, 74, 76, 78].map((m) => sounds.chordName(sounds.chordFor(m, 7)));
+  assert.deepEqual(inG, ['G', 'Am', 'Bm', 'C', 'D', 'Em', 'F♯°']);
+  assert.deepEqual(sounds.chordFor(61, 0), [61, 65, 68]); // between the scale notes: major
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'" />
+<title>PRISM — Studio</title>
+<link rel="stylesheet" href="./styles.css" />
+<link rel="stylesheet" href="./scope.css" />
+<link rel="stylesheet" href="./studio.css" />
+</head>
+<body>
+<div class="app studio-app" id="app">
+
+  <header class="titlebar">
+    <div class="brand">
+      <span class="mark"></span>
+      <span class="wordmark">PRISM</span>
+      <nav class="pages" aria-label="Page">
+        <a class="page is-active" href="./studio.html" aria-current="page">Studio</a>
+        <a class="page" href="./index.html">Visualizer</a>
+        <a class="page" href="./scope.html">Oscilloscope</a>
+      </nav>
+    </div>
+
+    <div class="titlebar-right">
+      <button class="rec-song" id="recBtn" aria-pressed="false" title="Record everything you hear to a file">
+        <span class="rec-dot"></span><span id="recLabel">Record song</span>
+      </button>
+      <div class="focus-badge" id="focusBadge" data-state="captured">
+        <span class="dot"></span><span class="focus-text">KEYS CAPTURED</span>
+      </div>
+      <button class="icon-btn" id="fullscreenBtn" title="Fullscreen (F11)">Full</button>
+      <div class="win-controls">
+        <button class="win min" id="winMin" aria-label="Minimise"></button>
+        <button class="win max" id="winMax" aria-label="Maximise"></button>
+        <button class="win close" id="winClose" aria-label="Close"></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="studio-screen" id="screen">
+    <div class="scope-bezel">
+      <div class="scope-area" id="circlesArea">
+        <canvas id="grid"></canvas>
+        <canvas id="beam"></canvas>
+        <div class="screen-status" id="screenStatus"></div>
+        <div class="circle-tag tag-music"><b>Music</b> keys · loop · beat</div>
+        <div class="circle-tag tag-voice"><b>Voice</b> <span id="voiceTag">sing</span></div>
+        <div class="screen-hint" id="screenHint">Sing to move the shape · play <kbd>A</kbd>…<kbd>'</kbd> · <kbd>space</kbd> to loop</div>
+      </div>
+      <div class="spectrum-band">
+        <canvas id="spectrum" aria-label="Spectrum analyzer"></canvas>
+      </div>
+    </div>
+    <div class="start-veil" id="startVeil" hidden>
+      <button class="start-btn" id="startBtn">Start the studio</button>
+    </div>
+  </main>
+
+  <section class="deck">
+    <article class="panel panel-voice">
+      <header class="panel-head"><span class="panel-title">Voice</span><span class="panel-sub" id="micState">mic starting…</span></header>
+      <div class="voice-body">
+        <div class="vu" aria-hidden="true"><div class="vu-fill" id="micMeter"></div></div>
+        <div class="voice-note"><span id="voiceNote">—</span><small id="voiceHz">sing something</small></div>
+      </div>
+      <div class="panel-row">
+        <button class="toggle" id="phonesBtn" aria-pressed="false" title="Hear yourself with the effects. Only with headphones, or the speakers will howl">Headphones</button>
+        <button class="toggle" id="voiceLoopBtn" aria-pressed="true" title="Record your voice into the loop">Voice → loop</button>
+      </div>
+      <button class="pill mic-retry" id="micBtn" hidden>Turn mic on</button>
+    </article>
+
+    <article class="panel panel-loop">
+      <header class="panel-head"><span class="panel-title">Loop</span><span class="panel-sub" id="loopLen"></span></header>
+      <div class="loop-body">
+        <button class="loop-btn" id="loopBtn" data-state="empty" aria-label="Loop">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="ring-bg" cx="50" cy="50" r="44" />
+            <circle class="ring" id="loopRing" cx="50" cy="50" r="44" pathLength="100" />
+          </svg>
+          <span class="loop-label" id="loopLabel">REC</span>
+          <kbd>space</kbd>
+        </button>
+        <div class="loop-side">
+          <div class="loop-state" id="loopState">Press to record</div>
+          <div class="layers" id="loopLayers" aria-label="Layers"></div>
+          <div class="panel-row">
+            <button class="pill" id="undoBtn" disabled>Undo <kbd>⌫</kbd></button>
+            <button class="pill" id="stopBtn" disabled>Stop</button>
+            <button class="pill" id="clearBtn" disabled>Clear <kbd>del</kbd></button>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel panel-beat">
+      <header class="panel-head"><span class="panel-title">Beat</span><span class="panel-sub"><kbd>B</kbd> on / off</span></header>
+      <div class="seg seg-big" id="beatSeg">
+        <button data-beat="" class="is-on">Off</button><button data-beat="pulse">Pulse</button><button data-beat="groove">Groove</button><button data-beat="trap">Trap</button>
+      </div>
+      <div class="panel-row beat-row">
+        <div id="tempoKnob"></div>
+        <div class="steps" id="steps" aria-hidden="true"></div>
+      </div>
+    </article>
+
+    <article class="panel panel-sound">
+      <header class="panel-head"><span class="panel-title">Sound</span><span class="panel-sub"><kbd>1</kbd>–<kbd>5</kbd></span></header>
+      <div class="seg seg-big" id="soundSeg"></div>
+      <div class="panel-row">
+        <button class="toggle" id="chordBtn" aria-pressed="false" title="Each key plays a whole chord that fits the key">Chords <kbd>C</kbd></button>
+        <div class="mini-ctl"><span class="ctl-label">Key</span><div class="stepper small"><button id="keyDown" aria-label="Key down">−</button><span id="keyValue">C</span><button id="keyUp" aria-label="Key up">+</button></div></div>
+        <div class="mini-ctl"><span class="ctl-label">Octave <kbd>Z</kbd><kbd>X</kbd></span><div class="stepper small"><button id="octDown" aria-label="Octave down">−</button><span id="octValue">C4</span><button id="octUp" aria-label="Octave up">+</button></div></div>
+      </div>
+    </article>
+
+    <article class="panel panel-fx">
+      <header class="panel-head"><span class="panel-title">Effects</span><span class="panel-sub">drag · scroll · double-click resets</span></header>
+      <div class="knobs" id="fxKnobs">
+        <div data-fx="drive"></div><div data-fx="crush"></div><div data-fx="filter"></div><div data-fx="echo"></div><div data-fx="space"></div>
+        <div class="knob-gap"></div>
+        <div id="volumeKnob"></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="key-row" id="keyRow">
+    <div class="keybed" id="keybed"></div>
+    <button class="breakaway" id="breakawayKey" data-state="captured">
+      <span class="breakaway-title" id="breakawayTitle">Breakaway</span>
+      <span class="breakaway-sub" id="breakawaySub">release keyboard</span>
+      <kbd id="breakawayKbd">esc</kbd>
+    </button>
+  </section>
+</div>
+
+<script type="module" src="./js/studio/app.js"></script>
+</body>
+</html>
