@@ -519,10 +519,15 @@ check('the beat can lock to a free loop: tempo where the loop is whole bars', ()
   assert.ok(Math.abs(drums.fitTempo(3.1, 90) - 240 / 3.1) < 1e-9);
   assert.equal(drums.fitTempo(0.5, 100), null);        // nothing sensible fits
 });
-check('every beat pattern is sixteen steps of known symbols', () => {
+check('every beat: known parts, 16 or 32 steps of known symbols, a kit and a tempo in range', () => {
   for (const [name, b] of Object.entries(drums.BEATS)) {
-    for (const part of ['kick', 'snare', 'hat']) assert.match(b[part], /^[xor.]{16}$/, `${name}.${part}`);
+    const parts = drums.PARTS.filter((p) => b[p]);
+    assert.ok(parts.length >= 2, `${name}: parts`);
+    for (const part of parts) assert.match(b[part], /^([xor.]{16}|[xor.]{32})$/, `${name}.${part}`);
+    assert.ok(b.kit in drums.KITS, `${name}: kit ${b.kit}`);
+    assert.ok(b.tempo >= drums.TEMPO_MIN && b.tempo <= drums.TEMPO_MAX, `${name}: tempo ${b.tempo}`);
   }
+  assert.ok(Object.keys(drums.BEATS).length >= 9);
 });
 check('chord mode: each note of the key gets its own chord from the key', () => {
   const names = [60, 62, 64, 65, 67, 69, 71].map((m) => sounds.chordName(sounds.chordFor(m, 0)));
@@ -556,5 +561,101 @@ check('shape knobs: centre plays the sound as designed, the ends scale it 8x eit
 check('a layer level at its default is unity gain', () => {
   assert.equal(fx.levelGain(fx.FX_DEFAULTS.level), 1);
   assert.equal(fx.levelGain(0), 0);
+});
+
+const project = await import('../src/js/studio/project.js');
+const perfMod = await import('../src/js/studio/perf.js');
+const voiceFx = await import('../src/js/studio/voice-fx.js');
+console.log('\nsave, load and performance');
+check('a saved loop comes back with every layer, its effects and the session', () => {
+  const len = 4000;
+  const a = new Float32Array(len).map((_, i) => Math.sin(i / 7) * 0.5);
+  const b = new Float32Array(len).map((_, i) => (i % 100 === 0 ? 0.01 : 0));  // quiet: keeps its own scale
+  const meta = { name: 'Rage ✦ test', sampleRate: 8000, length: len, bpm: 150, beat: 'rage', session: { sound: 'ragelead', key: 7 } };
+  const bytes = project.encodeProject(meta, [a, b], [{ crush: 0.7, mute: true }, { tape: 0.5 }]);
+  const back = project.decodeProject(bytes.buffer.slice(0));
+  assert.equal(back.meta.name, 'Rage ✦ test'); assert.equal(back.meta.bpm, 150); assert.equal(back.meta.session.sound, 'ragelead');
+  assert.deepEqual(back.layerFx, [{ crush: 0.7, mute: true }, { tape: 0.5 }]);
+  for (let i = 0; i < len; i++) assert.ok(Math.abs(back.layers[0][i] - a[i]) < 0.5 / 32767 + 1e-6, `a[${i}]`);
+  assert.ok(Math.abs(back.layers[1][100] - 0.01) < 1e-6 && back.layers[1][101] === 0);
+  assert.equal(bytes.length, 12 + new DataView(bytes.buffer).getUint32(8, true) + 2 * len * 2);
+});
+check('anything that is not a loop file is refused, not half-loaded', () => {
+  assert.throws(() => project.decodeProject(new TextEncoder().encode('hello world, not a loop')), /not a PRISM loop/);
+  const good = project.encodeProject({ name: 'x', sampleRate: 8000, length: 100 }, [new Float32Array(100)]);
+  assert.throws(() => project.decodeProject(good.slice(0, good.length - 10)), /cut short/);
+});
+check('a loop saved at another sample rate is resampled to the same length in time', () => {
+  const r = project.resample(new Float32Array(44100).fill(0.25), 44100, 48000);
+  assert.equal(r.length, 48000); assert.ok(r.every((v) => Math.abs(v - 0.25) < 1e-6));
+  assert.equal(project.fileNameFor('my: loop/<1>?'), 'my loop 1.prism');
+  assert.equal(project.fileNameFor('Ragé ✦ loop'), 'Rage loop.prism');   // plain ASCII, or Chromium renames it
+  assert.equal(project.fileNameFor('✦✦'), 'PRISM loop.prism');
+});
+check('the looper hands its layers out and takes them back, playing from the top', () => {
+  const c = layered([0.5]);
+  const saved = c.exportLoop();
+  const d = new LoopCore(8000);
+  d.importLoop(saved.layers, saved.length);
+  assert.equal(d.state, 'playing'); assert.equal(d.status().layers, 2);
+  const out = run(d, 1.0);
+  assert.equal(out[0], 1); assert.equal(out[100], 0.5);
+});
+const pump = (core, seconds, signal) => {
+  const n = Math.round(core.sr * seconds), L = new Float32Array(n), R = new Float32Array(n), inp = new Float32Array(n).map((_, i) => signal(core.frame + i));
+  for (let i = 0; i < n; i += 128) { const m = Math.min(128, n - i); core.process(inp.subarray(i, i + m), null, L.subarray(i, i + m), R.subarray(i, i + m), m); }
+  return L;
+};
+check('stutter repeats the last whole slice, in time, then lets go exactly where the music is', () => {
+  const p = new perfMod.PerfCore(8000);
+  p.setGrid(500, 0);                                   // a sixteenth = 500 samples
+  const ramp = (f) => (f % 8000) / 8000;               // a signal that says where it is
+  pump(p, 1.05, ramp);                                 // now at 8400: slice 8000-8999 holds us
+  p.stutter(2);                                        // eighths: 1000 samples; repeat 7000-7999
+  const out = pump(p, 0.5, ramp);                      // 8400…12399
+  assert.ok(Math.abs(out[1000] - ramp(7000 + ((9400 - 8000) % 1000))) < 1e-3, 'repeats the slice before, keeping its phase');
+  assert.ok(Math.abs(out[2000] - out[1000]) < 1e-3, 'every slice the same');
+  p.stutter(0);
+  const after = pump(p, 0.2, ramp);
+  assert.ok(Math.abs(after[400] - ramp(12400 + 400)) < 1e-6, 'back in time once released');
+});
+check('tape stop winds down to silence and comes straight back', () => {
+  const p = new perfMod.PerfCore(8000);
+  const tone = (f) => Math.sin((2 * Math.PI * 440 * f) / 8000);
+  pump(p, 0.5, tone);
+  p.tape(true);
+  const out = pump(p, 1.2, tone);
+  const energy = (a, from, to) => Math.sqrt(a.slice(from, to).reduce((s, v) => s + v * v, 0) / (to - from));
+  assert.ok(energy(out, 200, 1000) > 0.3, 'still sounding as it slows');
+  assert.ok(energy(out, 7400, 9600) < 1e-6, 'stopped');
+  p.tape(false);
+  const back = pump(p, 0.1, tone);
+  assert.ok(energy(back, 300, 800) > 0.6, 'back');
+});
+check('pitch: a ratio of 1 passes the voice straight through; 2 doubles the pitch', () => {
+  const sr = 16000, n = sr;
+  const sine = new Float32Array(n).map((_, i) => Math.sin((2 * Math.PI * 200 * i) / sr));
+  const ps = new voiceFx.PitchShifter(sr);
+  const same = new Float32Array(n); ps.process(sine, same, n);
+  assert.deepEqual(same, sine);
+  const up = new voiceFx.PitchShifter(sr); up.target = 2;
+  const out = new Float32Array(n); up.process(sine, out, n);
+  let crossings = 0; for (let i = sr / 2 + 1; i < n; i++) if (out[i - 1] < 0 && out[i] >= 0) crossings++;
+  assert.ok(Math.abs(crossings - 200) <= 12, `${crossings} upward crossings in 0.5 s (want ~200 for 400 Hz)`);
+});
+check('tune: pulls a sung pitch onto the key — fully at 1, partly in between, not at all at 0', () => {
+  const cents = (r) => 1200 * Math.log2(r);
+  const sharpC = 261.63 * Math.pow(2, 30 / 1200);         // C4, 30 cents sharp
+  assert.ok(Math.abs(cents(voiceFx.tuneRatio(sharpC, 0, 1)) + 30) < 0.5);
+  assert.ok(Math.abs(cents(voiceFx.tuneRatio(sharpC, 0, 0.5)) + 15) < 0.5);
+  assert.equal(voiceFx.tuneRatio(sharpC, 0, 0), 1);
+  const cSharp = 277.18;                                   // C♯ is not in C major: goes to C or D
+  assert.ok(Math.abs(Math.abs(cents(voiceFx.tuneRatio(cSharp, 0, 1))) - 100) < 1);
+  assert.ok(Math.abs(cents(voiceFx.tuneRatio(cSharp, 1, 1))) < 1, 'but it is in D♭ major');
+});
+check('the tape knob is silent at zero and wobbles more as it turns', () => {
+  const zero = fx.tapeSetting(0), full = fx.tapeSetting(1);
+  assert.equal(zero.wow + zero.flutter, 0); assert.equal(zero.tone, 20000);
+  assert.ok(full.wow > 0.002 && full.tone < 5000);
 });
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

@@ -24,6 +24,8 @@
     </div>
 
     <div class="titlebar-right">
+      <label class="master-vol" title="Volume"><span>Vol</span><input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume" /></label>
+      <button class="rec-song loops-btn" id="loopsBtn" aria-expanded="false" title="Save and load your loops (Ctrl+S saves)">Loops</button>
       <button class="rec-song" id="recBtn" aria-pressed="false" title="Record everything you hear to a file">
         <span class="rec-dot"></span><span id="recLabel">Record song</span>
       </button>
@@ -48,6 +50,11 @@
         <div class="circle-tag tag-music"><b>Music</b> keys · loop · beat</div>
         <div class="circle-tag tag-voice"><b>Voice</b> <span id="voiceTag">sing</span></div>
         <div class="screen-hint" id="screenHint">Sing to move the shape · play <kbd>A</kbd>…<kbd>'</kbd> · <kbd>space</kbd> to loop</div>
+        <div class="pads" id="pads" aria-label="Performance pads: hold">
+          <button class="pad" data-pad="stutter2" title="Hold: repeat the last eighth">Stutter ⅛<kbd>Q</kbd></button>
+          <button class="pad" data-pad="stutter1" title="Hold: repeat the last sixteenth">Stutter 1/16<kbd>R</kbd></button>
+          <button class="pad" data-pad="tape" title="Hold: the whole mix winds down like a turntable">Tape stop<kbd>V</kbd></button>
+        </div>
       </div>
       <div class="spectrum-band">
         <canvas id="spectrum" aria-label="Spectrum analyzer"></canvas>
@@ -64,6 +71,7 @@
       <div class="voice-body">
         <div class="vu" aria-hidden="true"><div class="vu-fill" id="micMeter"></div></div>
         <div class="voice-note"><span id="voiceNote">—</span><small id="voiceHz">sing something</small></div>
+        <div class="voice-knobs"><div id="pitchKnob"></div><div id="tuneKnob"></div></div>
       </div>
       <div class="panel-row">
         <button class="toggle" id="phonesBtn" aria-pressed="false" title="Hear yourself with the effects. Only with headphones, or the speakers will howl">Headphones</button>
@@ -98,9 +106,7 @@
 
     <article class="panel panel-beat">
       <header class="panel-head"><span class="panel-title">Beat</span><span class="panel-sub"><kbd>B</kbd> on / off</span></header>
-      <div class="seg seg-big" id="beatSeg">
-        <button data-beat="" class="is-on">Off</button><button data-beat="pulse">Pulse</button><button data-beat="groove">Groove</button><button data-beat="trap">Trap</button>
-      </div>
+      <div class="beat-grid" id="beatSeg"></div>
       <div class="panel-row beat-row">
         <div id="tempoKnob"></div>
         <div class="steps" id="steps" aria-hidden="true"></div>
@@ -108,7 +114,7 @@
     </article>
 
     <article class="panel panel-sound">
-      <header class="panel-head"><span class="panel-title">Sound</span><span class="panel-sub"><kbd>1</kbd>–<kbd>5</kbd> pick a group, again for the next</span></header>
+      <header class="panel-head"><span class="panel-title">Sound</span><span class="panel-sub"><kbd>1</kbd>–<kbd>6</kbd> pick a group, again for the next</span></header>
       <div class="seg seg-big" id="groupSeg"></div>
       <div class="sound-body">
         <div class="sound-list" id="soundList"></div>
@@ -126,9 +132,9 @@
         <button class="toggle mute-btn" id="muteBtn" aria-pressed="false" hidden>Mute</button>
       </header>
       <div class="knobs" id="fxKnobs">
-        <div data-fx="drive"></div><div data-fx="crush"></div><div data-fx="filter"></div><div data-fx="echo"></div><div data-fx="space"></div><div data-fx="level"></div>
+        <div data-fx="drive"></div><div data-fx="crush"></div><div data-fx="filter"></div><div data-fx="echo"></div><div data-fx="space"></div><div data-fx="tape"></div>
         <div class="knob-gap"></div>
-        <div id="volumeKnob"></div>
+        <div data-fx="level"></div>
       </div>
     </article>
   </section>
@@ -146,6 +152,23 @@
       <kbd id="breakawayKbd">esc</kbd>
     </button>
   </section>
+
+  <aside class="library" id="library" hidden>
+    <header class="library-head">
+      <h2>Loops</h2>
+      <button class="icon-btn" id="libraryClose" aria-label="Close">✕</button>
+    </header>
+    <form class="library-save" id="saveForm">
+      <input type="text" id="saveName" maxlength="80" spellcheck="false" aria-label="Name" />
+      <button class="pill" id="saveBtn" type="submit">Save loop</button>
+    </form>
+    <p class="library-note" id="libraryNote">Saves every layer and its effects, the beat, the tempo and your sound.</p>
+    <ul class="library-list" id="libraryList"></ul>
+    <footer class="library-foot">
+      <button class="pill" id="importBtn">Open a .prism file…</button>
+      <input type="file" id="importFile" accept=".prism" hidden />
+    </footer>
+  </aside>
 </div>
 
 <script type="module" src="./js/studio/app.js"></script>

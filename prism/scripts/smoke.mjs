@@ -3,7 +3,7 @@
  *
  * Launches the real binary, drives it over the Chrome DevTools Protocol (Node's
  * built-in WebSocket, no extra dependencies) through the Studio (circles, beat,
- * looper, undo and redo), the visualizer and the oscilloscope with a built-in music track, saves
+ * looper, undo and redo, saving and loading a loop), the visualizer and the oscilloscope with a built-in music track, saves
  * screenshots, and checks each Electron fuse against the attack it exists to stop.
  * Exits non-zero on any failure.
  */
@@ -124,8 +124,16 @@ async function drive() {
     check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'empty' && !document.getElementById('redoBtn').disabled && 'undone'`, 5000)) === 'undone', 'Backspace undoes the layer, and Redo is offered', await loopState());
     await key('Backspace', 'Backspace', 8, 8); // Shift
     check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'playing' && 'playing'`, 5000)) === 'playing', 'Shift+Backspace redoes it', await loopState());
+    await key('KeyS', 's', 83, 2); // Ctrl+S
+    const saved = await waitFor(`(() => { const t = document.getElementById('libraryNote').textContent; return t.startsWith('Saved') && t; })()`, 8000);
+    check(String(saved).startsWith('Saved'), 'Ctrl+S saves the loop to the library (IndexedDB on prism://)', String(saved || await evaluate("document.getElementById('libraryNote').textContent")));
     await key('Delete', 'Delete', 46);
     check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'empty' && 'empty'`, 5000)) === 'empty', 'Delete clears the loop', await loopState());
+    await evaluate(`document.querySelector('.library-item .lib-load').click(), true`);
+    const reloaded = await waitFor(`document.getElementById('loopBtn').dataset.state === 'playing' && document.getElementById('libraryNote').textContent.startsWith('Loaded') && document.getElementById('loopLen').textContent`, 8000);
+    check(reloaded === '1 bar', 'the saved loop loads back, on the beat', String(reloaded));
+    await key('Delete', 'Delete', 46);
+    await evaluate(`document.getElementById('libraryClose').click(), true`);
     await evaluate(`document.querySelector('[data-beat=""]').click(), true`);
     const studioShot = await send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(SHOT.replace(/\.png$/, '-studio.png'), Buffer.from(studioShot.result.data, 'base64'));

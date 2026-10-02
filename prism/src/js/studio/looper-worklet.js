@@ -20,6 +20,12 @@ class PrismLooper extends AudioWorkletProcessor {
       if (d.cmd === 'redo') this.core.redo();
       if (d.cmd === 'clear') this.core.clear();
       if (d.cmd === 'stop') this.core.toggleStop();
+      if (d.cmd === 'import') this.core.importLoop(d.layers, d.length);
+      if (d.cmd === 'export') {
+        const loop = this.core.exportLoop();
+        this.port.postMessage({ exported: loop }, loop.layers.map((l) => l.buffer));
+        return;
+      }
       if (d.cmd || 'barSamples' in d) this.port.postMessage(this.core.status());
     };
   }

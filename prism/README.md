@@ -46,17 +46,22 @@ make a song, with no setup. The mic switches on by itself.
   layers. **Undo** (`Backspace` or `Ctrl+Z`) takes back the last layer and **Redo**
   (`Shift+Backspace`, `Ctrl+Shift+Z` or `Ctrl+Y`) puts it back, until you record
   something new. `Delete` clears everything.
-- **Beat**: Pulse, Groove or Trap (`B` turns it on and off) and a tempo knob. With
+- **Beat**: nine grooves, each with its own drum kit and tempo (`B` turns it on and
+  off): Pulse, Groove, Trap, **Lo-fi** (swung and dusty, with vinyl crackle),
+  **Hyper** (hyperpop: blown-out kick, claps, hat rolls), **Rage** (distorted 808s),
+  **Jersey** (club kicks), **Punk** and **Grunge** (live-kit snare and crash). With
   a beat running a take snaps to 1, 2, 4 or 8 whole bars and starts on the nearest
   downbeat, so loops always line up however sloppily you press. If you make a loop
   first and add the beat afterwards, the tempo snaps to fit the loop instead.
-- **Sound**: twenty sounds in five groups (`1` to `5` picks a group; press it
-  again for the next sound in it):
-  - **Keys**: Soft Keys, E-Piano, Organ, Bells, Marimba
+- **Sound**: 27 sounds in six groups (`1` to `6` picks a group; press it again
+  for the next sound in it):
+  - **Keys**: Soft Keys, E-Piano, Organ, Bells, Lo-fi Keys, Marimba
   - **Pads**: Warm Pad, Strings, Choir, Glass
   - **Bass**: Sub Bass, 808, Wobble (synced to the beat), Reese
-  - **Lead**: Square Lead, Supersaw, Chiptune, Whistle
+  - **Lead**: Square Lead, Supersaw, Chiptune, Grunge Guitar (a distorted power
+    chord from one key), Whistle
   - **Pluck**: Pluck, Harp, Kalimba, Stab
+  - **Hyper**: Rage Lead, Hyper Lead, Glitch Bell, Dist 808
 
   **Tone**, **Attack** and **Release** reshape whichever one you pick; the centre
   is the sound as designed. Basses and some leads play one note at a time and
@@ -66,14 +71,28 @@ make a song, with no setup. The mic switches on by itself.
   **Key** moves the whole keyboard; `Z` and `X` change octave.
 - **Effects**: Drive (soft-clip distortion), Crush (bit crusher), Filter (a DJ
   filter: left of centre is darker, right is thinner, centre does nothing), Echo
-  (dotted eighths, synced to the tempo), Space (reverb) and Level. Drag, scroll or
-  use the arrow keys; double-click resets a knob.
+  (dotted eighths, synced to the tempo), Space (reverb), Tape (wow, flutter and a
+  worn top end: the lo-fi wobble) and Level. Drag, scroll or use the arrow keys;
+  double-click resets a knob.
+- **Voice**: **Pitch** shifts your voice up to an octave up (chipmunk) or down
+  (demon) without changing its speed; **Tune** snaps it to the key you're in, and
+  all the way up it jumps note to note, the hard-tuned hyperpop sound. Both change
+  what's recorded into the loop.
+- **Pads** (bottom right of the screen, hold them): **Stutter ⅛** (`Q`) and
+  **Stutter 1/16** (`R`) repeat the last slice in time, the beat-repeat move;
+  **Tape stop** (`V`) winds everything down like a turntable losing power. Let go
+  and the music is right where it would have been.
 - **Effects per layer**: every loop layer keeps its own effects. A new layer
   starts with the **Live** effects as they were while you recorded it, so it keeps
   sounding the way you played it when you change the knobs afterwards. Click a
   layer's number (in the Loop panel or above the knobs) and the knobs turn just
   that layer: crush the drums you beatboxed, filter one layer away, or **Mute** it.
   Undo and Redo keep each layer's settings.
+- **Loops** in the titlebar: name your loop and save it (or press `Ctrl+S`); load
+  any saved loop with one click. A save keeps every layer and its effects, the beat
+  and tempo, your sound, key and voice settings. **File** saves one as a `.prism`
+  file to keep or share, and **Open a .prism file** loads one (and adds it to your
+  loops).
 - **Record song** in the titlebar saves everything you hear to a file.
 
 **Headphones.** The Studio never plays your mic through the speakers, because it
@@ -278,7 +297,8 @@ src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · pia
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
 src/js/studio/          engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
-                        sounds.js · knob.js · app.js
+                        sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·
+                        perf-worklet.js · project.js · library.js · knob.js · app.js
 src/js/scope/           engine.js · capture-worklet.js · live.js · live-worklet.js ·
                         tracks.js · display.js · measure.js · app.js
 src/js/chrome.js        window chrome shared by every page
@@ -291,7 +311,9 @@ consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
 ratios, the piano tuning curve, that each figure spins at its real beat rate, and
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
 looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per
-layer), the effect curves, the beat grid, the sound library, chord mode, and the main process's URL, path and permission rules.
+layer, saving and loading), the .prism file format, the stutter and tape-stop
+pads, the pitch shifter and autotune, the effect curves, the beat patterns and
+kits, the sound library, chord mode, and the main process's URL, path and permission rules.
 
 The piano model's treble asymptote and octave-type curve are the paper's fitted
 values; its bass asymptote and transition width are fitted per instrument there, so

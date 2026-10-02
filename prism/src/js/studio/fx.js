@@ -62,8 +62,17 @@ export function echoSetting(knob) {
   return { send: x < 0.001 ? 0 : 0.25 + 0.55 * x, feedback: 0.2 + 0.45 * x };
 }
 
+/**
+ * Tape knob: wow (a slow pitch drift), flutter (a fast one) and the top end
+ * rolling off, like a worn cassette. Delay swing in seconds, and the tone cutoff.
+ */
+export function tapeSetting(knob) {
+  const x = clamp(knob, 0, 1);
+  return { wow: 0.0032 * x, flutter: 0.00028 * x, tone: 20000 * Math.pow(4200 / 20000, x) };
+}
+
 /** Knob positions an untouched chain starts from. */
-export const FX_DEFAULTS = { drive: 0, crush: 0, filter: 0.5, echo: 0, space: 0.25, level: 0.8, mute: false };
+export const FX_DEFAULTS = { drive: 0, crush: 0, filter: 0.5, echo: 0, space: 0.25, tape: 0, level: 0.8, mute: false };
 
 /** Level knob to gain: the default position (0.8) is unity, the top is +2 dB. */
 export const levelGain = (v) => clamp(v, 0, 1) * 1.25;
@@ -85,7 +94,7 @@ export class SpaceBus {
  * One set of effects: the live sound has one, and so does every loop layer, so
  * a layer keeps the effects it was made with however the knobs move later.
  *
- *   in ─▶ Drive ─▶ Crush ─▶ Filter ─▶ Level ─┬─────────▶ out
+ *   in ─▶ Drive ─▶ Crush ─▶ Filter ─▶ Tape ─▶ Level ─┬─────────▶ out
  *                                            ├─▶ Echo ─▶ out
  *                                            └─▶ Space bus (shared reverb)
  */
@@ -102,7 +111,28 @@ export class FxChain {
     this.hp.type = 'highpass';
     this.hp.Q.value = 2.5;
     this.level = ctx.createGain();
-    this.input.connect(this.drive).connect(this.crush).connect(this.lp).connect(this.hp).connect(this.level);
+    // Tape: a delay whose time swings slowly (wow) and quickly (flutter). Its
+    // centre equals the swing, so at zero it's no delay at all.
+    this.tapeDelay = ctx.createDelay(0.05);
+    this.tapeDelay.delayTime.value = 0;
+    this.wow = ctx.createOscillator();
+    this.wow.frequency.value = 0.65;
+    this.wowDepth = ctx.createGain();
+    this.wowDepth.gain.value = 0;
+    this.flutter = ctx.createOscillator();
+    this.flutter.frequency.value = 6.3;
+    this.flutterDepth = ctx.createGain();
+    this.flutterDepth.gain.value = 0;
+    this.wow.connect(this.wowDepth).connect(this.tapeDelay.delayTime);
+    this.flutter.connect(this.flutterDepth).connect(this.tapeDelay.delayTime);
+    this.wow.start();
+    this.flutter.start();
+    this.tapeTone = ctx.createBiquadFilter();
+    this.tapeTone.type = 'lowpass';
+    this.tapeTone.frequency.value = 20000;
+    this.tapeTone.Q.value = 0.5;
+    this.input.connect(this.drive).connect(this.crush).connect(this.lp).connect(this.hp)
+      .connect(this.tapeDelay).connect(this.tapeTone).connect(this.level);
     this.level.connect(out);
 
     // Echo: delay with a darkening feedback loop, so repeats fade like tape.
@@ -131,6 +161,7 @@ export class FxChain {
     else if (name === 'filter') this.setFilter(value);
     else if (name === 'echo') this.setEcho(value);
     else if (name === 'space') this.setSpace(value);
+    else if (name === 'tape') this.setTape(value);
     else if (name === 'level') this.setLevel(value);
     else if (name === 'mute') this.setMute(value);
   }
@@ -170,6 +201,16 @@ export class FxChain {
   setSpace(v) {
     this.values.space = v;
     this.spaceSend.gain.setTargetAtTime(clamp(v, 0, 1) * 0.9, this.ctx.currentTime, 0.05);
+  }
+
+  setTape(v) {
+    this.values.tape = v;
+    const { wow, flutter, tone } = tapeSetting(v);
+    const t = this.ctx.currentTime;
+    this.tapeDelay.delayTime.setTargetAtTime(wow + flutter, t, 0.05);
+    this.wowDepth.gain.setTargetAtTime(wow, t, 0.05);
+    this.flutterDepth.gain.setTargetAtTime(flutter, t, 0.05);
+    this.tapeTone.frequency.setTargetAtTime(tone, t, 0.05);
   }
 
   setLevel(v) {

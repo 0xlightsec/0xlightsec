@@ -1,5 +1,5 @@
 /**
- * The Studio's instrument: a library of ready-made sounds in five groups, three
+ * The Studio's instrument: a library of ready-made sounds in six groups, three
  * knobs to shape any of them (Tone, Attack, Release), and chord mode, where one
  * key plays a whole chord that belongs to the key you're in — so whatever you
  * press sounds right.
@@ -14,6 +14,7 @@
  *   lfo     wobble: { to: 'pitch' | 'filter' | 'amp', rate Hz or beats per cycle, depth, delay }
  *   drive   soft-clip inside the voice
  *   shift   octave shift in semitones; mono + glide for basses and leads
+ *   short   the name on its button, when the full one is long
  *
  * Voices are keyed by what triggered them (a key code, a MIDI note), so a chord
  * starts and stops as one even when two chords share a note.
@@ -30,36 +31,44 @@ export const GROUPS = [
   { id: 'pads',  label: 'Pads' },
   { id: 'bass',  label: 'Bass' },
   { id: 'lead',  label: 'Lead' },
-  { id: 'pluck', label: 'Pluck' }
+  { id: 'pluck', label: 'Pluck' },
+  { id: 'hyper', label: 'Hyper' }
 ];
 
 export const SOUNDS = {
   // Keys
-  keys:     { group: 'keys', label: 'Soft Keys', osc: [tone('triangle'), tone('sine', 2, 0.35)], env: [0.004, 0.9, 0.22, 0.5], cutoff: 4200, level: 0.2 },
+  keys:     { group: 'keys', label: 'Soft Keys', short: 'Soft', osc: [tone('triangle'), tone('sine', 2, 0.35)], env: [0.004, 0.9, 0.22, 0.5], cutoff: 4200, level: 0.2 },
   epiano:   { group: 'keys', label: 'E-Piano', osc: [tone('sine'), tone('sine', 2, 0.2), tone('triangle', 7, 0.07)], env: [0.003, 1.2, 0.3, 0.45], cutoff: 6000, level: 0.22, lfo: { to: 'amp', rate: 4.5, depth: 0.12 } },
   organ:    { group: 'keys', label: 'Organ', osc: [tone('sine', 0.5, 0.35), tone('sine', 1, 0.5), tone('sine', 2, 0.3), tone('sine', 3, 0.18), tone('sine', 4, 0.12)], env: [0.01, 0.1, 1, 0.08], cutoff: 8000, level: 0.14, lfo: { to: 'pitch', rate: 6.5, depth: 6 } },
   bells:    { group: 'keys', label: 'Bells', osc: [tone('sine'), tone('sine', 2.76, 0.32), tone('sine', 5.4, 0.16)], env: [0.002, 1.8, 0, 2.2], cutoff: 9000, level: 0.2 },
-  marimba:  { group: 'keys', label: 'Marimba', osc: [tone('sine'), tone('sine', 4, 0.25)], env: [0.002, 0.28, 0, 0.3], cutoff: 5000, level: 0.3, pitch: { semis: 0.6, time: 0.02 } },
+  lofikeys: { group: 'keys', label: 'Lo-fi Keys', short: 'Lo-fi', osc: [tone('sine'), tone('sine', 2, 0.18), tone('triangle', 3, 0.05)], env: [0.004, 1.4, 0.3, 0.5], cutoff: 1300, level: 0.24, lfo: { to: 'pitch', rate: 0.9, depth: 14 } },
+  marimba:  { group: 'keys', label: 'Marimba', short: 'Mallet', osc: [tone('sine'), tone('sine', 4, 0.25)], env: [0.002, 0.28, 0, 0.3], cutoff: 5000, level: 0.3, pitch: { semis: 0.6, time: 0.02 } },
   // Pads
-  pad:      { group: 'pads', label: 'Warm Pad', osc: [saw(-9), saw(9)], env: [0.35, 0.8, 0.75, 1.4], cutoff: 1700, level: 0.1 },
+  pad:      { group: 'pads', label: 'Warm Pad', short: 'Warm', osc: [saw(-9), saw(9)], env: [0.35, 0.8, 0.75, 1.4], cutoff: 1700, level: 0.1 },
   strings:  { group: 'pads', label: 'Strings', osc: [{ saws: 5, spread: 16 }], env: [0.5, 1, 0.85, 1.2], cutoff: 2600, level: 0.07, lfo: { to: 'pitch', rate: 5, depth: 8, delay: 0.5 } },
   choir:    { group: 'pads', label: 'Choir', osc: [saw(-6, 0.5), saw(6, 0.5)], env: [0.4, 1, 0.8, 1.1], cutoff: 5000, vowel: [800, 1150, 2900], level: 0.3, lfo: { to: 'pitch', rate: 5.2, depth: 10, delay: 0.3 } },
   glass:    { group: 'pads', label: 'Glass', osc: [tone('triangle'), tone('sine', 3, 0.25), tone('sine', 5, 0.08)], env: [0.6, 1.5, 0.6, 2], cutoff: 7000, level: 0.16, lfo: { to: 'amp', rate: 0.5, depth: 0.25 } },
   // Bass
-  bass:     { group: 'bass', label: 'Sub Bass', osc: [tone('square', 1, 0.45), tone('sine', 1, 0.6)], env: [0.005, 0.3, 0.7, 0.12], cutoff: 900, env2: 700, level: 0.17, shift: -12, mono: true, glide: 0.04 },
+  bass:     { group: 'bass', label: 'Sub Bass', short: 'Sub', osc: [tone('square', 1, 0.45), tone('sine', 1, 0.6)], env: [0.005, 0.3, 0.7, 0.12], cutoff: 900, env2: 700, level: 0.17, shift: -12, mono: true, glide: 0.04 },
   b808:     { group: 'bass', label: '808', osc: [tone('sine', 1, 0.9)], env: [0.003, 1.4, 0, 0.5], cutoff: 3000, level: 0.32, shift: -12, mono: true, glide: 0.06, pitch: { semis: 12, time: 0.05 }, drive: 0.35 },
   wobble:   { group: 'bass', label: 'Wobble', osc: [saw(-7), tone('square', 1, 0.4, 7)], env: [0.01, 0.4, 0.85, 0.15], cutoff: 500, level: 0.15, shift: -12, mono: true, glide: 0.05, lfo: { to: 'filter', beats: 0.5, depth: 1800 } },
   reese:    { group: 'bass', label: 'Reese', osc: [saw(-22), saw(22)], env: [0.01, 0.5, 0.9, 0.2], cutoff: 700, level: 0.13, shift: -12, mono: true, glide: 0.05, drive: 0.2 },
   // Lead
-  lead:     { group: 'lead', label: 'Square Lead', osc: [tone('square', 1, 0.6, -8), tone('square', 1, 0.6, 8)], env: [0.01, 0.3, 0.8, 0.25], cutoff: 3200, level: 0.09, lfo: { to: 'pitch', rate: 5.5, depth: 14, delay: 0.4 } },
-  supersaw: { group: 'lead', label: 'Supersaw', osc: [{ saws: 7, spread: 26 }], env: [0.01, 0.4, 0.8, 0.3], cutoff: 6000, level: 0.06 },
-  chip:     { group: 'lead', label: 'Chiptune', osc: [tone('square', 1, 0.6)], env: [0.001, 0.15, 0.6, 0.05], cutoff: 16000, level: 0.09, mono: true },
+  lead:     { group: 'lead', label: 'Square Lead', short: 'Square', osc: [tone('square', 1, 0.6, -8), tone('square', 1, 0.6, 8)], env: [0.01, 0.3, 0.8, 0.25], cutoff: 3200, level: 0.09, lfo: { to: 'pitch', rate: 5.5, depth: 14, delay: 0.4 } },
+  supersaw: { group: 'lead', label: 'Supersaw', short: 'Saws', osc: [{ saws: 7, spread: 26 }], env: [0.01, 0.4, 0.8, 0.3], cutoff: 6000, level: 0.06 },
+  chip:     { group: 'lead', label: 'Chiptune', short: 'Chip', osc: [tone('square', 1, 0.6)], env: [0.001, 0.15, 0.6, 0.05], cutoff: 16000, level: 0.09, mono: true },
+  grunge:   { group: 'lead', label: 'Grunge Guitar', short: 'Grunge', osc: [saw(-5, 0.6), tone('sawtooth', 1.5, 0.45, 5), tone('sawtooth', 2, 0.3)], env: [0.004, 0.9, 0.6, 0.2], cutoff: 2400, level: 0.1, drive: 0.85, mono: true, glide: 0.02 },
   whistle:  { group: 'lead', label: 'Whistle', osc: [tone('sine', 1, 0.9), tone('sine', 2, 0.04)], env: [0.06, 0.4, 0.85, 0.2], cutoff: 9000, level: 0.24, mono: true, glide: 0.08, lfo: { to: 'pitch', rate: 6, depth: 18, delay: 0.25 } },
   // Pluck
   pluck:    { group: 'pluck', label: 'Pluck', osc: [saw(-4), tone('square', 1, 0.6, 4)], env: [0.002, 0.28, 0, 0.22], cutoff: 600, env2: 5200, level: 0.13 },
   harp:     { group: 'pluck', label: 'Harp', osc: [tone('triangle'), tone('sine', 2, 0.2)], env: [0.002, 1.1, 0, 1.2], cutoff: 1500, env2: 4000, level: 0.24 },
   kalimba:  { group: 'pluck', label: 'Kalimba', osc: [tone('sine'), tone('sine', 5.4, 0.15)], env: [0.002, 0.6, 0, 0.6], cutoff: 6000, level: 0.28, pitch: { semis: 0.4, time: 0.015 } },
-  stab:     { group: 'pluck', label: 'Stab', osc: [{ saws: 5, spread: 20 }], env: [0.002, 0.18, 0, 0.15], cutoff: 900, env2: 6000, level: 0.07 }
+  stab:     { group: 'pluck', label: 'Stab', osc: [{ saws: 5, spread: 20 }], env: [0.002, 0.18, 0, 0.15], cutoff: 900, env2: 6000, level: 0.07 },
+  // Hyper: hyperpop, rage, electric
+  ragelead: { group: 'hyper', label: 'Rage Lead', short: 'Rage', osc: [{ saws: 7, spread: 35 }, tone('square', 2, 0.25)], env: [0.003, 0.5, 0.75, 0.25], cutoff: 7000, level: 0.055, drive: 0.3 },
+  hyperlead:{ group: 'hyper', label: 'Hyper Lead', short: 'Hyper', osc: [tone('square', 1, 0.5, -6), saw(6, 0.5), tone('sine', 2, 0.25)], env: [0.005, 0.3, 0.8, 0.2], cutoff: 9000, level: 0.09, mono: true, glide: 0.05, pitch: { semis: -3, time: 0.06 }, lfo: { to: 'pitch', rate: 7, depth: 22, delay: 0.15 } },
+  glitchbell:{ group: 'hyper', label: 'Glitch Bell', short: 'Glitch', osc: [tone('sine', 1, 0.8), tone('sine', 3.5, 0.4), tone('sine', 7.1, 0.2)], env: [0.001, 0.35, 0, 0.4], cutoff: 12000, level: 0.22, pitch: { semis: 12, time: 0.01 } },
+  dist808:  { group: 'hyper', label: 'Dist 808', osc: [tone('sine', 1, 0.9)], env: [0.003, 1.6, 0, 0.6], cutoff: 4000, level: 0.26, shift: -12, mono: true, glide: 0.1, pitch: { semis: 14, time: 0.06 }, drive: 0.9 }
 };
 
 /** Knob centre (0.5) plays a sound as designed; each side scales it by up to 8x. */

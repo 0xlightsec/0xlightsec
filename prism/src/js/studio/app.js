@@ -1,9 +1,12 @@
 /**
  * Studio: sing to move the circles, and make music with one hand.
  *
- *   Voice   your mic drives the upper circle; on headphones you hear it with the FX
+ *   Voice   your mic drives the upper circle; Pitch and Tune (hyperpop autotune)
+ *           change what's recorded; on headphones you hear it with the FX
  *   Loop    one button: record, loop, add layers (Space); Undo, Redo and Clear
- *   Beat    pick a groove; loops snap to its bars
+ *   Beat    nine grooves from lo-fi to hyperpop and punk; loops snap to its bars
+ *   Pads    hold to stutter or tape-stop everything (Q, R, V)
+ *   Loops   save and load whole loops in the app, or as .prism files
  *   Sound   twenty sounds in five groups, shaped with Tone, Attack and Release
  *   Keys    chord mode (one key = one chord that fits), key and octave
  *   Effects Drive, Crush, Filter, Echo, Space, Level — for what you play live, or
@@ -16,6 +19,8 @@ import { StudioEngine } from './engine.js';
 import { SOUNDS, GROUPS, SHAPE_DEFAULT, KEY_NAMES, chordFor, chordName, shapeFactor } from './sounds.js';
 import { BEATS, STEPS, TEMPO_MIN, TEMPO_MAX } from './drums.js';
 import { filterSetting, crushBits, levelGain, FX_DEFAULTS } from './fx.js';
+import { encodeProject, decodeProject, resample, defaultName, fileNameFor } from './project.js';
+import { saveLoop, listLoops, loadLoop, deleteLoop } from './library.js';
 import { Knob } from './knob.js';
 import { ScopeDisplay, SpectrumView, PHOSPHORS } from '../scope/display.js';
 import { Driver, levelFromDb } from '../scope/live.js';
@@ -38,6 +43,7 @@ const FX_KNOBS = {
   filter: { label: 'Filter', hue: 196, def: 0.5, bipolar: true, format: formatFilter },
   echo:   { label: 'Echo',   hue: 160, format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) },
   space:  { label: 'Space',  hue: 255, format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) },
+  tape:   { label: 'Tape',   hue: 28,  format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) },
   level:  { label: 'Level',  hue: 40,  def: FX_DEFAULTS.level, format: formatLevel }
 };
 const SHAPE_KNOBS = {
@@ -56,6 +62,8 @@ const settings = {
   bpm: 96,
   lastBeat: 'groove',
   voiceToLoop: true,
+  voicePitch: 0.5, // knob positions: centre = no shift
+  voiceTune: 0,
   volume: 0.8,
   fx: { ...FX_DEFAULTS },
   ...load()
@@ -183,14 +191,30 @@ let lastPitchAt = 0;
 function trackVoice(now) {
   const n = engine.buf2.length;
   voice.level = levelFromDb(toDb(rms(engine.buf2, n - 1024, n)));
-  if (!engine.micOn || now - lastPitchAt < 50) return;
+  // Tune needs to follow every note quickly; the readout alone doesn't.
+  if (!engine.micOn || now - lastPitchAt < (settings.voiceTune > 0 ? 20 : 50)) return;
   lastPitchAt = now;
   const buf = engine.buf2.subarray(n - PITCH_WINDOW);
-  if (rms(buf) < VOICE_GATE) return;
-  const hit = detectPitch(buf, engine.sampleRate);
-  if (!hit || hit.clarity < 0.85 || hit.hz < 60 || hit.hz > 1500) return;
-  voice.hz = voice.hz && now - voice.at < VOICE_HOLD_MS * 2 ? voice.hz * Math.pow(hit.hz / voice.hz, 0.5) : hit.hz;
-  voice.at = now;
+  const hit = rms(buf) < VOICE_GATE ? null : detectPitch(buf, engine.sampleRate);
+  if (hit && hit.clarity >= 0.85 && hit.hz >= 60 && hit.hz <= 1500) {
+    voice.hz = voice.hz && now - voice.at < VOICE_HOLD_MS * 2 ? voice.hz * Math.pow(hit.hz / voice.hz, 0.5) : hit.hz;
+    voice.at = now;
+  }
+  engine.updateVoice(voiceLive(now) ? voice.hz : 0, settings.key);
+}
+
+const pitchSemis = (v) => Math.round((v - 0.5) * 24);
+let pitchKnob = null;
+let tuneKnob = null;
+
+function refreshVoiceKnobs() {
+  pitchKnob?.set(settings.voicePitch, false);
+  tuneKnob?.set(settings.voiceTune, false);
+}
+
+function setVoiceFx() {
+  engine.setVoiceFx(pitchSemis(settings.voicePitch), settings.voiceTune);
+  save();
 }
 
 const voiceLive = (now) => engine.micOn && voice.hz > 0 && now - voice.at < VOICE_HOLD_MS;
@@ -330,6 +354,8 @@ function beatPhase() {
 }
 
 function setBeat(name) {
+  // A beat brings its own tempo, unless a loop already set one.
+  if (name && name !== engine.beatName && !engine.hasLoop) engine.setTempo(BEATS[name].tempo);
   engine.setBeat(name || null);
   if (name) settings.lastBeat = name;
   for (const b of $('beatSeg').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.beat === (name || ''));
@@ -401,7 +427,8 @@ function renderSoundPicker() {
       const b = document.createElement('button');
       b.className = 'sound-chip';
       b.dataset.sound = id;
-      b.textContent = p.label;
+      b.textContent = p.short ?? p.label;
+      b.title = p.label;
       b.addEventListener('click', () => setSound(id));
       list.appendChild(b);
     }
@@ -501,13 +528,7 @@ function toggleRecord() {
 engine.onRecorded = (blob) => {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
   const ext = blob.type.includes('ogg') ? 'ogg' : 'webm';
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `PRISM song ${stamp}.${ext}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  download(blob, `PRISM song ${stamp}.${ext}`);
   $('recLabel').textContent = 'Record song';
 };
 
@@ -628,7 +649,16 @@ function wire() {
   $('octUp').addEventListener('click', () => keys.setOctave(keys.octave + 1));
 
   // Beat.
-  for (const b of $('beatSeg').querySelectorAll('button')) b.addEventListener('click', () => setBeat(b.dataset.beat));
+  const beatGrid = $('beatSeg');
+  for (const [id, label] of [['', 'Off'], ...Object.entries(BEATS).map(([k, b]) => [k, b.label])]) {
+    const b = document.createElement('button');
+    b.dataset.beat = id;
+    b.textContent = label;
+    b.title = id ? `${label} · ${BEATS[id].tempo} BPM` : 'No beat';
+    b.classList.toggle('is-on', id === '');
+    b.addEventListener('click', () => setBeat(id));
+    beatGrid.appendChild(b);
+  }
   tempoKnob = new Knob($('tempoKnob'), {
     label: 'Tempo',
     value: (settings.bpm - TEMPO_MIN) / (TEMPO_MAX - TEMPO_MIN),
@@ -690,18 +720,61 @@ function wire() {
     $('muteBtn').setAttribute('aria-pressed', String(on));
     renderLayers(engine.loop);
   });
-  new Knob($('volumeKnob'), {
-    label: 'Volume',
-    value: settings.volume,
-    def: 0.8,
-    hue: 0,
-    format: (v) => `${Math.round(v * 100)}%`,
+  $('volume').value = String(Math.round(settings.volume * 100));
+  $('volume').addEventListener('input', (e) => {
+    settings.volume = Number(e.target.value) / 100;
+    engine.setVolume(settings.volume);
+    save();
+  });
+
+  // Voice: Pitch and Tune.
+  pitchKnob = new Knob($('pitchKnob'), {
+    label: 'Pitch',
+    value: settings.voicePitch,
+    def: 0.5,
+    bipolar: true,
+    small: true,
+    hue: 300,
+    format: (v) => {
+      const st = pitchSemis(v);
+      return st === 0 ? 'off' : `${st > 0 ? '+' : '−'}${Math.abs(st)} st`;
+    },
     onChange: (v) => {
-      settings.volume = v;
-      engine.setVolume(v);
-      save();
+      settings.voicePitch = v;
+      setVoiceFx();
     }
   });
+  tuneKnob = new Knob($('tuneKnob'), {
+    label: 'Tune',
+    value: settings.voiceTune,
+    def: 0,
+    small: true,
+    hue: 175,
+    format: (v) => (v < 0.01 ? 'off' : v > 0.97 ? 'hard' : `${Math.round(v * 100)}%`),
+    onChange: (v) => {
+      settings.voiceTune = v;
+      setVoiceFx();
+    }
+  });
+
+  // Performance pads: hold on screen, or Q / R / V.
+  for (const b of $('pads').querySelectorAll('[data-pad]')) {
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      b.setPointerCapture(e.pointerId);
+      padDown(b.dataset.pad);
+    });
+    const up = () => padUp(b.dataset.pad);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('lostpointercapture', up);
+  }
+  window.addEventListener('keyup', (e) => {
+    const pad = PAD_KEYS[e.code];
+    if (pad) padUp(pad);
+  });
+
+  wireLibrary();
 
   $('recBtn').addEventListener('click', toggleRecord);
   $('breakawayKey').addEventListener('click', () => keys.toggleCapture());
@@ -726,6 +799,9 @@ function wire() {
       } else if (e.code === 'KeyY') {
         e.preventDefault();
         loop('redo');
+      } else if (e.code === 'KeyS') {
+        e.preventDefault();
+        openLibrary(true);
       }
       return;
     }
@@ -743,6 +819,8 @@ function wire() {
       setChords(!settings.chords);
     } else if (e.code === 'KeyB' && !e.repeat) {
       setBeat(engine.beatName ? '' : settings.lastBeat);
+    } else if (PAD_KEYS[e.code]) {
+      if (!e.repeat) padDown(PAD_KEYS[e.code]);
     } else if (digit && GROUPS[digit[1] - 1] && !e.repeat) {
       pickGroup(GROUPS[digit[1] - 1].id);
     }
@@ -750,6 +828,220 @@ function wire() {
   // A space released on a focused button would click it too.
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space' && keys.active) e.preventDefault();
+  });
+}
+
+/* ---------------------------------- pads ---------------------------------- */
+
+const PAD_KEYS = { KeyQ: 'stutter2', KeyR: 'stutter1', KeyV: 'tape' };
+const held = new Set();
+
+function padDown(pad) {
+  if (held.has(pad)) return;
+  held.add(pad);
+  if (pad === 'tape') engine.pad({ tape: true });
+  else engine.pad({ stutter: pad === 'stutter2' ? 2 : 1 });
+  $('pads').querySelector(`[data-pad="${pad}"]`)?.classList.add('is-held');
+  touched = true;
+}
+
+function padUp(pad) {
+  if (!held.delete(pad)) return;
+  if (pad === 'tape') engine.pad({ tape: false });
+  else if (![...held].some((p) => p.startsWith('stutter'))) engine.pad({ stutter: 0 });
+  else engine.pad({ stutter: held.has('stutter2') ? 2 : 1 }); // the other stutter is still held
+  $('pads').querySelector(`[data-pad="${pad}"]`)?.classList.remove('is-held');
+}
+
+/* --------------------------------- library --------------------------------- */
+
+function libraryNote(text, bad = false) {
+  const el = $('libraryNote');
+  el.textContent = text;
+  el.classList.toggle('is-bad', bad);
+}
+
+function openLibrary(saveNow = false) {
+  const lib = $('library');
+  lib.hidden = false;
+  $('loopsBtn').setAttribute('aria-expanded', 'true');
+  if (!$('saveName').value) $('saveName').value = defaultName();
+  renderLibrary();
+  if (saveNow) saveCurrent();
+}
+
+function closeLibrary() {
+  $('library').hidden = true;
+  $('loopsBtn').setAttribute('aria-expanded', 'false');
+  document.activeElement?.blur?.();
+}
+
+/** Everything a saved loop needs besides its audio. */
+function sessionNow() {
+  return {
+    sound: settings.sound,
+    shape: { ...settings.shape },
+    key: settings.key,
+    chords: settings.chords,
+    octave: keys.octave,
+    liveFx: { ...settings.fx },
+    voicePitch: settings.voicePitch,
+    voiceTune: settings.voiceTune
+  };
+}
+
+async function saveCurrent() {
+  if (!keptLayers(engine.loop)) {
+    libraryNote('Record a loop first, then save it here.', true);
+    return;
+  }
+  const name = ($('saveName').value || defaultName()).trim();
+  try {
+    const loop = await engine.exportLoop();
+    if (!loop.layers.length) throw new Error('the loop is empty');
+    const sr = engine.sampleRate;
+    const meta = { name, saved: Date.now(), sampleRate: sr, length: loop.length, bpm: engine.bpm, beat: engine.beatName, session: sessionNow() };
+    const bytes = encodeProject(meta, loop.layers, loop.layers.map((_, k) => engine.fxValues(k)));
+    await saveLoop({ name, saved: meta.saved, seconds: loop.length / sr, bpm: engine.bpm, beat: engine.beatName, layers: loop.layers.length }, bytes);
+    libraryNote(`Saved “${name}”.`);
+    $('saveName').value = defaultName();
+    renderLibrary();
+  } catch (err) {
+    libraryNote(`Couldn't save: ${err.message ?? err}`, true);
+  }
+}
+
+/** Load a .prism file's bytes: the loop, its effects, beat, tempo and sound. */
+async function openProject(bytes) {
+  const { meta, layers, layerFx } = decodeProject(bytes);
+  await engine.start();
+  const sr = engine.sampleRate;
+  const fitted = layers.map((l) => resample(l, meta.sampleRate || sr, sr));
+  const length = fitted[0]?.length ?? 0;
+  const ss = meta.session ?? {};
+
+  // The sound you were playing.
+  if (ss.sound in SOUNDS) setSound(ss.sound);
+  if (ss.shape) {
+    settings.shape = { ...SHAPE_DEFAULT, ...ss.shape };
+    for (const [k, knob] of Object.entries(shapeKnobs)) {
+      knob.set(settings.shape[k], false);
+      engine.setShape(k, settings.shape[k]);
+    }
+  }
+  if (Number.isInteger(ss.key)) setKey(ss.key);
+  if (typeof ss.chords === 'boolean') setChords(ss.chords);
+  if (Number.isInteger(ss.octave)) keys.setOctave(ss.octave);
+  if (ss.liveFx) {
+    settings.fx = { ...FX_DEFAULTS, ...ss.liveFx, mute: false };
+    for (const [name, v] of Object.entries(settings.fx)) engine.setFx('live', name, v);
+  }
+  if (Number.isFinite(ss.voicePitch)) settings.voicePitch = ss.voicePitch;
+  if (Number.isFinite(ss.voiceTune)) settings.voiceTune = ss.voiceTune;
+  setVoiceFx();
+
+  // Beat and tempo first, so the loop lands on the beat's grid.
+  const beat = meta.beat in BEATS ? meta.beat : null;
+  engine.loadBeat(beat, meta.bpm);
+  if (beat) settings.lastBeat = beat;
+  for (const b of $('beatSeg').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.beat === (beat ?? ''));
+  settings.bpm = engine.bpm;
+
+  fitted.forEach((_, k) => engine.chain(k).setAll({ ...FX_DEFAULTS, ...layerFx[k] }));
+  await engine.importLoop(fitted, length);
+  selectFxTarget('live');
+  refreshVoiceKnobs();
+  save();
+  touched = true;
+  return meta;
+}
+
+async function renderLibrary() {
+  const list = $('libraryList');
+  let loops = [];
+  try {
+    loops = await listLoops();
+  } catch (err) {
+    libraryNote(`The loop library isn't available: ${err.message ?? err}`, true);
+  }
+  list.innerHTML = '';
+  if (!loops.length) {
+    const li = document.createElement('li');
+    li.className = 'library-empty';
+    li.textContent = 'No saved loops yet.';
+    list.appendChild(li);
+    return;
+  }
+  for (const entry of loops) {
+    const li = document.createElement('li');
+    li.className = 'library-item';
+    const when = new Date(entry.saved).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const beat = entry.beat ? `${BEATS[entry.beat]?.label ?? entry.beat} ${Math.round(entry.bpm)} BPM` : 'no beat';
+    li.innerHTML = `<div class="lib-name"></div><div class="lib-info"></div>
+      <div class="lib-actions"><button class="pill lib-load">Load</button><button class="pill lib-export" title="Save as a .prism file">File</button><button class="pill lib-delete">Delete</button></div>`;
+    li.querySelector('.lib-name').textContent = entry.name;
+    li.querySelector('.lib-info').textContent = `${entry.layers} layer${entry.layers === 1 ? '' : 's'} · ${entry.seconds.toFixed(1)} s · ${beat} · ${when}`;
+    li.querySelector('.lib-load').addEventListener('click', async () => {
+      try {
+        await openProject(await loadLoop(entry.id));
+        libraryNote(`Loaded “${entry.name}”.`);
+      } catch (err) {
+        libraryNote(`Couldn't load it: ${err.message ?? err}`, true);
+      }
+    });
+    li.querySelector('.lib-export').addEventListener('click', async () => {
+      const bytes = await loadLoop(entry.id);
+      download(new Blob([bytes], { type: 'application/octet-stream' }), fileNameFor(entry.name));
+    });
+    const del = li.querySelector('.lib-delete');
+    del.addEventListener('click', async () => {
+      // Two clicks: a deleted loop is gone.
+      if (del.dataset.armed !== '1') {
+        del.dataset.armed = '1';
+        del.textContent = 'Sure?';
+        setTimeout(() => { del.dataset.armed = ''; del.textContent = 'Delete'; }, 3000);
+        return;
+      }
+      await deleteLoop(entry.id);
+      libraryNote(`Deleted “${entry.name}”.`);
+      renderLibrary();
+    });
+    list.appendChild(li);
+  }
+}
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+function wireLibrary() {
+  $('loopsBtn').addEventListener('click', () => ($('library').hidden ? openLibrary() : closeLibrary()));
+  $('libraryClose').addEventListener('click', closeLibrary);
+  $('saveForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveCurrent();
+  });
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const meta = await openProject(bytes);
+      // Keep it in the library too, so it's one click next time.
+      await saveLoop({ name: meta.name || file.name, saved: Date.now(), seconds: meta.length / meta.sampleRate, bpm: meta.bpm, beat: meta.beat, layers: meta.layers.length }, bytes);
+      libraryNote(`Opened “${meta.name || file.name}” and added it to your loops.`);
+      renderLibrary();
+    } catch (err) {
+      libraryNote(`Couldn't open ${file.name}: ${err.message ?? err}`, true);
+    }
   });
 }
 
@@ -794,6 +1086,7 @@ renderMic();
 for (const [name, v] of Object.entries(settings.fx)) engine.setFx('live', name, v);
 selectFxTarget('live');
 engine.setVolume(settings.volume);
+engine.setVoiceFx(pitchSemis(settings.voicePitch), settings.voiceTune);
 midi.connect();
 boot();
 requestAnimationFrame(frame);

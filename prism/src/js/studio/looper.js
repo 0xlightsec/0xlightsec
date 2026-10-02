@@ -174,6 +174,25 @@ export class LoopCore {
     }
   }
 
+  /** The loop as data, for saving: copies of the kept layers. */
+  exportLoop() {
+    return { length: this.length, layers: this.layers.map((l) => l.slice()) };
+  }
+
+  /** Replace everything with saved layers and play them from the top. */
+  importLoop(layers, length) {
+    this.clear();
+    const kept = layers.slice(0, MAX_LAYERS);
+    if (!kept.length || !(length > 0)) return;
+    this.length = Math.min(length, this.max);
+    this.layers = kept.map((l) => {
+      const data = new Float32Array(this.length);
+      data.set(l.subarray(0, this.length));
+      return data;
+    });
+    this.restart();
+  }
+
   /** Play from the top: now, or on the next downbeat when there's a beat. */
   restart() {
     let at = this.frame;
