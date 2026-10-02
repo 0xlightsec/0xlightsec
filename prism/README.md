@@ -66,6 +66,37 @@ can type, tab away or use shortcuts. The key itself turns green and becomes **re
 — press `Enter`, click it, or click the stage to take the keyboard back. The
 on-screen keys stay playable with the mouse either way.
 
+## Oscilloscope
+
+A second page (switch with **Visualizer / Oscilloscope** in the titlebar): a wave
+generator on CH1, your microphone on CH2, a glowing scope screen above and a
+readout below.
+
+- **Play** the generator with the same keys as the visualizer (or MIDI) in sine,
+  triangle, saw or square. **Latch** holds notes on with a tap, so you can sing
+  over a drone with your hands free. Esc is the breakaway, as on the main page.
+- **Shapes** (the default) plots each channel against itself a quarter-period
+  later — a phase portrait — so a single signal draws a figure: a sine draws a
+  circle, a square a square (with its real ringing at the corners), a triangle a
+  diamond. Chords draw rolling knots and lattices, your voice draws loops. Shapes
+  auto-fit to the screen.
+- **Y–T** is the classic dual trace, triggered on a rising edge so it stands
+  still (Auto picks the channel with signal), with min-max drawing so a fast wave
+  on a slow timebase shows as a band rather than a false squiggle.
+- **X–Y** plots the wave across against your voice up: hold a sine and sing a
+  fifth above it and you draw the 3 : 2 Lissajous yourself.
+- **Readout**: the note, frequency, peak-to-peak and RMS level of the wave; the
+  pitch, cents, level and clarity of your voice; and, between them, the interval
+  your voice makes with the wave, its just ratio, and how many cents you are off
+  it, on a tuning meter.
+- **Run / Stop** (space) freezes the capture; timebase and scale still apply to the
+  frozen frame. **Autoset** fits both channels and the timebase to the signal.
+
+Both channels share one audio context, so they stay sample-aligned for X–Y. The
+microphone is captured raw — echo cancellation, noise suppression and auto-gain
+all reshape the waveform — and never routed to the speakers. Use headphones, or
+the mic will hear the generator too.
+
 ## Input
 
 - **MIDI** — any Web MIDI device. Note on/off with velocity, sustain pedal (CC 64),
@@ -128,13 +159,16 @@ preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
+src/js/scope/           engine.js · display.js · measure.js · app.js   (oscilloscope page)
+src/js/chrome.js        window chrome shared by both pages
 src/js/app.js           wiring
 tests/theory.test.mjs   npm test
 ```
 
 `npm test` covers the wheel arithmetic, the tension ordering above, the
 consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
-ratios, the piano tuning curve, and that each figure spins at its real beat rate.
+ratios, the piano tuning curve, that each figure spins at its real beat rate, and
+the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS.
 
 The piano model's treble asymptote and octave-type curve are the paper's fitted
 values; its bass asymptote and transition width are fitted per instrument there, so

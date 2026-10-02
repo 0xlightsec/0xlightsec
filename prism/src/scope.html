@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'" />
+<title>PRISM — Oscilloscope</title>
+<link rel="stylesheet" href="./styles.css" />
+<link rel="stylesheet" href="./scope.css" />
+</head>
+<body>
+<div class="app scope-app" id="app">
+
+  <header class="titlebar">
+    <div class="brand">
+      <span class="mark"></span>
+      <span class="wordmark">PRISM</span>
+      <nav class="pages" aria-label="Page">
+        <a class="page" href="./index.html">Visualizer</a>
+        <a class="page is-active" href="./scope.html" aria-current="page">Oscilloscope</a>
+      </nav>
+    </div>
+
+    <nav class="modes" role="tablist" aria-label="Display mode">
+      <button class="mode is-active" data-display="shapes" role="tab" aria-selected="true">Shapes</button>
+      <button class="mode" data-display="yt" role="tab" aria-selected="false">Y–T</button>
+      <button class="mode" data-display="xy" role="tab" aria-selected="false">X–Y</button>
+    </nav>
+
+    <div class="titlebar-right">
+      <div class="focus-badge" id="focusBadge" data-state="captured">
+        <span class="dot"></span><span class="focus-text">KEYS CAPTURED</span>
+      </div>
+      <button class="icon-btn" id="fullscreenBtn" title="Fullscreen (F11)">Full</button>
+      <div class="win-controls">
+        <button class="win min" id="winMin" aria-label="Minimise"></button>
+        <button class="win max" id="winMax" aria-label="Maximise"></button>
+        <button class="win close" id="winClose" aria-label="Close"></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="scope-main" id="scopeMain">
+    <div class="scope-bezel">
+      <canvas id="grid"></canvas>
+      <canvas id="beam"></canvas>
+
+      <div class="scope-status scope-status-top">
+        <span class="st-run" id="stRun">RUN</span>
+        <span class="st-trig" id="stTrig">AUTO</span>
+        <span class="st-mode" id="stMode">SHAPES</span>
+      </div>
+      <div class="scope-status scope-status-bottom">
+        <span class="st-ch1" id="stCh1">CH1 200mV</span>
+        <span class="st-ch2" id="stCh2">CH2 50mV</span>
+        <span id="stTime">M 2.00ms</span>
+        <span id="stTrigSrc">T CH1 ↑ 0.00</span>
+      </div>
+      <div class="scope-hint" id="scopeHint">Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing</div>
+      <div class="scope-note" id="xyNote" hidden>CH1 → X · CH2 → Y · a sine on CH1 draws Lissajous figures</div>
+    </div>
+  </main>
+
+  <section class="readout">
+    <div class="controls">
+      <div class="ctl">
+        <span class="ctl-label">Time</span>
+        <div class="stepper"><button id="timeDown" aria-label="Faster timebase">−</button><span id="timeValue">2 ms</span><button id="timeUp" aria-label="Slower timebase">+</button></div>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Trigger</span>
+        <div class="seg" id="trigSeg">
+          <button data-trig="auto" class="is-on">Auto</button><button data-trig="1">CH1</button><button data-trig="2">CH2</button>
+        </div>
+      </div>
+      <div class="ctl ctl-slider">
+        <span class="ctl-label">Persist</span>
+        <input type="range" id="persist" min="0" max="100" value="55" />
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Acquire</span>
+        <div class="ctl-row">
+          <button class="pill" id="runBtn">Run / Stop <kbd>space</kbd></button>
+          <button class="pill" id="autosetBtn" title="Fit both channels and the timebase to the signal">Autoset</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Hold notes</span>
+        <button class="pill" id="latchBtn" aria-pressed="false">Latch</button>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Octave</span>
+        <div class="stepper"><button id="octDown" aria-label="Octave down">−</button><span id="octValue">C4</span><button id="octUp" aria-label="Octave up">+</button></div>
+      </div>
+      <div class="ctl ctl-slider">
+        <span class="ctl-label">Volume</span>
+        <input type="range" id="volume" min="0" max="100" value="40" />
+      </div>
+      <div class="ctl ctl-end">
+        <button class="pill breakaway-pill" id="breakawayBtn" data-state="captured">Breakaway <kbd id="breakawayKbd">esc</kbd></button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <article class="card ch1">
+        <header class="card-head">
+          <span class="ch-tag">CH1</span><span class="ch-name">Wave</span>
+          <div class="seg seg-wave" id="waveSeg">
+            <button data-wave="sine">Sine</button><button data-wave="triangle">Tri</button><button data-wave="sawtooth" class="is-on">Saw</button><button data-wave="square">Square</button>
+          </div>
+        </header>
+        <div class="card-body">
+          <div class="big"><span id="ch1Note">—</span><small id="ch1Hz">play a key</small></div>
+          <canvas class="mini" id="ch1Mini"></canvas>
+          <dl class="meas">
+            <div><dt>Vpp</dt><dd id="ch1Vpp">—</dd></div>
+            <div><dt>RMS</dt><dd id="ch1Rms">—</dd></div>
+            <div><dt>Scale</dt><dd><span class="stepper small"><button id="ch1Down" aria-label="CH1 zoom out">−</button><span id="ch1Scale">200 mV</span><button id="ch1Up" aria-label="CH1 zoom in">+</button></span></dd></div>
+          </dl>
+        </div>
+      </article>
+
+      <article class="card interval">
+        <header class="card-head"><span class="ch-name">Voice against wave</span></header>
+        <div class="card-body">
+          <div class="iv-title" id="ivTitle">Sing against the wave</div>
+          <div class="iv-ratio" id="ivRatio">—</div>
+          <div class="tune">
+            <div class="tune-track"><div class="tune-zone"></div><div class="tune-needle" id="tuneNeedle"></div></div>
+            <div class="tune-scale"><span>−50¢</span><span id="ivCents">—</span><span>+50¢</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card ch2">
+        <header class="card-head">
+          <span class="ch-tag">CH2</span><span class="ch-name">Voice</span>
+          <button class="pill mic-pill" id="micBtn" aria-pressed="false">Mic off</button>
+        </header>
+        <div class="card-body">
+          <div class="big"><span id="ch2Note">—</span><small id="ch2Hz">mic off</small></div>
+          <canvas class="mini" id="ch2Mini"></canvas>
+          <dl class="meas">
+            <div><dt>Level</dt><dd id="ch2Level">—</dd></div>
+            <div><dt>Clarity</dt><dd id="ch2Clarity">—</dd></div>
+            <div><dt>Scale</dt><dd><span class="stepper small"><button id="ch2Down" aria-label="CH2 zoom out">−</button><span id="ch2Scale">50 mV</span><button id="ch2Up" aria-label="CH2 zoom in">+</button></span></dd></div>
+          </dl>
+        </div>
+      </article>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="./js/scope/app.js"></script>
+</body>
+</html>

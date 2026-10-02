@@ -200,4 +200,37 @@ check('a major third shimmers faster than a fifth', () => {
   const fifth = Math.abs(spinOver([60, 67])[1]);
   assert.ok(third > 4 * fifth, `third ${third.toFixed(2)} vs fifth ${fifth.toFixed(2)} rad`);
 });
+
+const { findTrigger, peakToPeak, rms, toDb } = await import('../src/js/scope/measure.js');
+console.log('\noscilloscope measurement');
+const sine = (hz, n, sr = 48000, amp = 0.5, phase = 0.3) => Float32Array.from({ length: n }, (_, i) => amp * Math.sin(2 * Math.PI * hz * i / sr + phase));
+check('trigger lands on a rising zero crossing, interpolated', () => {
+  const buf = sine(440, 4800);
+  const t = findTrigger(buf);
+  assert.ok(t > 0, 'no trigger');
+  const i = Math.floor(t);
+  assert.ok(buf[i] < 0 && buf[i + 1] >= 0, 'not a rising edge');
+  // the true crossing of sin(2*pi*f*t + phase) is at a known position
+  const period = 48000 / 440;
+  const exact = ((2 * Math.PI - 0.3) / (2 * Math.PI)) * period;
+  const k = Math.round((t - exact) / period);
+  assert.ok(Math.abs(t - (exact + k * period)) < 0.05, `off by ${(t - exact - k * period).toFixed(3)} samples`);
+});
+check('trigger ignores noise below the hysteresis band and reports silence as -1', () => {
+  const noise = Float32Array.from({ length: 2000 }, () => (Math.random() - 0.5) * 0.004);
+  assert.equal(findTrigger(noise, { hysteresis: 0.01 }), -1);
+  assert.equal(findTrigger(new Float32Array(2000)), -1);
+});
+check('respects the search window, returning the latest crossing inside it', () => {
+  const buf = sine(100, 4800);
+  const all = findTrigger(buf);
+  const early = findTrigger(buf, { to: 2400 });
+  assert.ok(early < 2400 && early < all);
+});
+check('peak-to-peak, RMS and dBFS of a sine are what the maths says', () => {
+  const buf = sine(1000, 48000, 48000, 0.5);
+  assert.ok(Math.abs(peakToPeak(buf).vpp - 1) < 1e-3);
+  assert.ok(Math.abs(rms(buf) - 0.5 / Math.SQRT2) < 1e-3);
+  assert.ok(Math.abs(toDb(1) - 0) < 1e-9 && toDb(0) === -90);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

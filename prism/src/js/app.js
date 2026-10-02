@@ -15,9 +15,9 @@ import { Synth } from './io/synth.js';
 import { MidiInput } from './io/midi.js';
 import { AudioInput } from './io/audio-in.js';
 import { KeyboardInstrument, WHITE_KEYS, BLACK_KEYS } from './io/keyboard.js';
+import { wireWindowChrome, renderFocusBadge, trackFocus } from './chrome.js';
 
 const $ = (id) => document.getElementById(id);
-const bridge = window.prism ?? null;
 const STORE_KEY = 'prism.settings.v1';
 
 /* --------------------------------- state --------------------------------- */
@@ -216,13 +216,8 @@ function paintKeys(analysis) {
 /* ----------------------------- state rendering ---------------------------- */
 
 function renderKeyboardState(state) {
-  const badge = $('focusBadge');
-  const text = badge.querySelector('.focus-text');
   const breakaway = $('breakawayKey');
-
-  const mode = !state.focused ? 'blurred' : state.captured ? 'captured' : 'released';
-  badge.dataset.state = mode;
-  text.textContent = mode === 'captured' ? 'KEYS CAPTURED' : mode === 'released' ? 'KEYS RELEASED' : 'WINDOW UNFOCUSED';
+  renderFocusBadge(state);
 
   breakaway.dataset.state = state.captured ? 'captured' : 'released';
   $('breakawayTitle').textContent = state.captured ? 'Breakaway' : 'Re-arm';
@@ -504,10 +499,6 @@ function wireControls() {
     keys.rearm();
   });
 
-  $('fullscreenBtn').addEventListener('click', () => bridge?.toggleFullscreen());
-  $('winMin').addEventListener('click', () => bridge?.minimize());
-  $('winMax').addEventListener('click', () => bridge?.toggleMaximize());
-  $('winClose').addEventListener('click', () => bridge?.close());
 
   // App-level shortcuts that sit outside the note map.
   window.addEventListener('keydown', (e) => {
@@ -518,14 +509,12 @@ function wireControls() {
     else if (e.code === 'Digit4') setMode('lissajous');
     else if (e.code === 'Digit5') setMode('orbital');
     else if (e.code === 'Backquote') { e.preventDefault(); $('app').classList.toggle('is-bare'); }
-    else if (e.code === 'F11') { e.preventDefault(); bridge?.toggleFullscreen(); }
+    else if (e.code === 'F11') { e.preventDefault(); window.prism?.toggleFullscreen(); }
     else return;
   });
 
   window.addEventListener('resize', () => { stage.resize(); wheel.resize(); });
-  window.addEventListener('blur', () => keys.setFocused(false));
-  window.addEventListener('focus', () => keys.setFocused(true));
-  bridge?.onFocusChange((focused) => keys.setFocused(focused));
+  trackFocus(keys);
 }
 
 /* -------------------------------- settings -------------------------------- */
@@ -581,7 +570,7 @@ function applySettings() {
 
 /* --------------------------------- start --------------------------------- */
 
-if (bridge?.platform === 'darwin') document.body.classList.add('is-mac');
+wireWindowChrome();
 
 buildKeybed();
 wireControls();

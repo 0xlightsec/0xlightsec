@@ -514,3 +514,16 @@ select:focus { outline: 1px solid var(--accent); }
   font-variant-numeric: tabular-nums;
 }
 .app.is-bare .harmonic-head { opacity: 1; }
+
+/* Page switcher in the titlebar. */
+.pages {
+  -webkit-app-region: no-drag;
+  display: flex; gap: 2px; margin-left: 14px; padding: 2px;
+  border: 1px solid var(--panel-border); border-radius: 8px; background: rgba(255, 255, 255, 0.03);
+}
+.page {
+  color: var(--ink-faint); text-decoration: none; font-size: 11px; letter-spacing: 0.06em;
+  padding: 4px 10px; border-radius: 6px; transition: color 0.14s, background 0.14s;
+}
+.page:hover { color: var(--ink); }
+.page.is-active { color: var(--ink); background: rgba(255, 255, 255, 0.08); }
