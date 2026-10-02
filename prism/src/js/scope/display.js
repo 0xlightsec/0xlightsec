@@ -31,6 +31,7 @@ export class ScopeDisplay {
     this.dpr = 1;
     this.phosphor = PHOSPHORS.pink;
     this.gridVisible = true;
+    this.fill = false; // Music pictures use the whole canvas, not just the graticule
   }
 
   /** The picture views look best on a bare screen; the measurement views need the grid. */
@@ -278,16 +279,19 @@ export class ScopeDisplay {
   drawMusic(left, right, count, intensity) {
     const n = Math.min(count, left.length - 1);
     const from = left.length - n;
-    const scale = this.divY * 3.8;
+    // Full scale (±1) fills the screen height, or with `fill` the canvas, less a margin.
+    const scale = this.fill ? Math.min(this.h / 2 - 10, this.w / 2 - 10) : this.divY * 3.8;
+    const cx = this.fill ? this.w / 2 : this.cx;
+    const cy = this.fill ? this.h / 2 : this.cy;
     const bands = [new Path2D(), new Path2D(), new Path2D()];
-    const slow = Math.max(1.5, this.divY * 0.04);
-    const fast = Math.max(8, this.divY * 0.3);
-    let px = this.cx + left[from] * scale;
-    let py = this.cy - right[from] * scale;
+    const slow = Math.max(1.5, scale * 0.0105);
+    const fast = Math.max(8, scale * 0.079);
+    let px = cx + left[from] * scale;
+    let py = cy - right[from] * scale;
     let current = -1;
     for (let i = from + 1; i < left.length; i++) {
-      const x = this.cx + left[i] * scale;
-      const y = this.cy - right[i] * scale;
+      const x = cx + left[i] * scale;
+      const y = cy - right[i] * scale;
       const d = Math.hypot(x - px, y - py);
       const band = d < slow ? 0 : d < fast ? 1 : 2;
       if (band !== current) {
@@ -301,7 +305,8 @@ export class ScopeDisplay {
     const b = this.bctx;
     b.save();
     b.beginPath();
-    b.rect(this.left, this.top, this.sw, this.sh);
+    if (this.fill) b.rect(0, 0, this.w, this.h);
+    else b.rect(this.left, this.top, this.sw, this.sh);
     b.clip();
     // Roughly brightness ∝ 1/speed, as on a CRT: a jump crossing the screen in a
     // few samples moves ~50x faster than a traced stroke and all but vanishes.

@@ -62,6 +62,7 @@ engine.voiceToLoop = settings.voiceToLoop;
 
 const display = new ScopeDisplay($('grid'), $('beam'));
 display.setGrid(false);
+display.fill = true;
 display.phosphor = PHOSPHORS.pink;
 const spectrum = new SpectrumView($('spectrum'));
 

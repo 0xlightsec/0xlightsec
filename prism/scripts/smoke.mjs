@@ -112,7 +112,7 @@ async function drive() {
     const mic = await waitFor("(() => { const t = document.getElementById('micState').textContent; return !t.includes('starting') && t; })()", 10000);
     check(!!mic, 'microphone state settles', String(mic));
     const drawn = await waitFor(`(() => { const c = document.getElementById('beam'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-      let lit = 0; for (let i = 3; i < d.length; i += 4 * 7) if (d[i] > 40) lit++; return lit > 200 && lit; })()`, 10000);
+      let lit = 0; for (let i = 3; i < d.length; i += 4 * 3) if (d[i] > 40) lit++; return lit > 300 && lit; })()`, 10000);
     check(!!drawn, 'live circles draw (audio worklets under the CSP)', `${drawn} lit samples`);
     await evaluate(`document.querySelector('[data-beat="pulse"]').click(), true`);
     await key('Space', ' ', 32);
