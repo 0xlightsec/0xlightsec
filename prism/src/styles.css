@@ -487,3 +487,30 @@ select:focus { outline: 1px solid var(--accent); }
   width: var(--bw);
   left: calc((var(--after) + 1) * var(--kw) + var(--after) * var(--gap) + var(--gap) / 2 - var(--bw) / 2);
 }
+
+/* ---------------------------- harmonic curve modes ---------------------------- */
+
+/* Lissajous and Orbital are pure black with nothing on the stage but the curve and
+   its header, so the instrument panels step aside. */
+.stage-wrap.mode-curve { background: #000; }
+.stage-wrap.mode-curve .hud,
+.stage-wrap.mode-curve .stage-foot { opacity: 0; }
+
+.harmonic-head {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding-top: clamp(22px, 5.5vh, 64px);
+  text-align: center; pointer-events: none;
+  color: #fff; opacity: 0; transition: opacity 0.3s ease;
+}
+.stage-wrap.mode-curve .harmonic-head { opacity: 1; }
+.harmonic-title {
+  font-size: clamp(11px, 1.35vh, 15px); font-weight: 500;
+  letter-spacing: 0.32em; padding-left: 0.32em; /* re-centre against the tracking */
+}
+.harmonic-ratio {
+  margin-top: 0.35em;
+  font-size: clamp(36px, 7.5vh, 84px); font-weight: 300;
+  letter-spacing: 0.04em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.app.is-bare .harmonic-head { opacity: 1; }

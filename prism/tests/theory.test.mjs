@@ -130,4 +130,74 @@ check('dyad reports its interval quality', () => {
   assert.equal(nameChord([C, G]).quality, '5');
 });
 
+
+const { ratioForSemitones, chordRatios, intervalTitle, chordTitle } = await import('../src/js/theory/ratios.js');
+console.log('just ratios');
+check('fifth is 3:2, third 5:4, octave 2:1, twelfth 3:1', () => {
+  assert.deepEqual(ratioForSemitones(7), [3, 2]);
+  assert.deepEqual(ratioForSemitones(4), [5, 4]);
+  assert.deepEqual(ratioForSemitones(12), [2, 1]);
+  assert.deepEqual(ratioForSemitones(19), [3, 1]);
+});
+check('C+G -> 2:3 (low:high), titled THE PERFECT FIFTH', () => {
+  assert.deepEqual(chordRatios([60, 67]), [2, 3]);
+  assert.equal(intervalTitle(60, 67), 'THE PERFECT FIFTH');
+});
+check('major triad -> 4:5:6, titled A MAJOR CHORD', () => {
+  assert.deepEqual(chordRatios([60, 64, 67]), [4, 5, 6]);
+  assert.deepEqual(chordRatios([62, 66, 69]), [4, 5, 6]); // transposition-invariant
+  assert.equal(chordTitle([60, 64, 67]), 'A MAJOR CHORD');
+});
+check('minor triad -> 10:12:15, dominant 7th -> 36:45:54:64', () => {
+  assert.deepEqual(chordRatios([60, 63, 67]), [10, 12, 15]);
+  assert.deepEqual(chordRatios([60, 64, 67, 70]), [36, 45, 54, 64]);
+  assert.equal(chordTitle([60, 63, 67]), 'A MINOR CHORD');
+  assert.equal(chordTitle([60, 63, 66]), 'A DIMINISHED CHORD');
+  assert.equal(chordTitle([60, 64, 68]), 'AN AUGMENTED CHORD');
+});
+
+const { stretchCents, inharmonicity, pianoFrequency } = await import('../src/js/theory/piano.js');
+console.log('\npiano tuning');
+check('A4 stays at 440 Hz, middle C unstretched', () => {
+  assert.equal(pianoFrequency(69).toFixed(6), '440.000000');
+  assert.ok(Math.abs(stretchCents(60)) < 0.01);
+});
+check('Railsback curve: bass flat, treble sharp, within typical bounds', () => {
+  assert.ok(stretchCents(21) < -20 && stretchCents(21) > -60, `A0 ${stretchCents(21).toFixed(1)}`);
+  assert.ok(stretchCents(108) > 20 && stretchCents(108) < 60, `C8 ${stretchCents(108).toFixed(1)}`);
+  for (let m = 72; m <= 108; m += 12) assert.ok(stretchCents(m) > stretchCents(m - 12), `not rising at ${m}`);
+});
+check('inharmonicity near 3e-4 at middle C, rising into the treble', () => {
+  assert.ok(inharmonicity(60) > 1e-4 && inharmonicity(60) < 1e-3);
+  assert.ok(inharmonicity(108) > 10 * inharmonicity(60));
+});
+check('octaves are wide, so they beat (pure ET would not)', () => {
+  assert.ok(pianoFrequency(72) > 2 * pianoFrequency(60));
+  assert.ok(pianoFrequency(96) - 2 * pianoFrequency(84) > 1);
+});
+
+const { HarmonicRenderer } = await import('../src/js/render/harmonic.js');
+console.log('\nfigure spin');
+const spinOver = (midis, seconds = 1) => {
+  const r = new HarmonicRenderer();
+  const voices = midis.map((m) => ({ midi: m, gate: true, env: 1 }));
+  const before = [...r.phases];
+  for (let i = 0; i < seconds * 60; i++) r.update('lissajous', voices, 1, 1 / 60);
+  return r.phases.map((p, i) => p - before[i]);
+};
+check('a fifth at middle C rolls at its real beat rate (~0.44 Hz)', () => {
+  const d = spinOver([60, 67]);
+  const hz = (d[1] - d[0]) / (2 * Math.PI);
+  assert.ok(Math.abs(Math.abs(hz) - 0.443) < 0.01, `rolled ${hz.toFixed(3)} Hz`);
+});
+check('an octave spins on a stretched piano (pure ET would freeze it)', () => {
+  const d = spinOver([60, 72]);
+  const hz = (d[1] - d[0]) / (2 * Math.PI);
+  assert.ok(Math.abs(hz - 0.671) < 0.01, `rolled ${hz.toFixed(3)} Hz`);
+});
+check('a major third shimmers faster than a fifth', () => {
+  const third = Math.abs(spinOver([60, 64])[1]);
+  const fifth = Math.abs(spinOver([60, 67])[1]);
+  assert.ok(third > 4 * fifth, `third ${third.toFixed(2)} vs fifth ${fifth.toFixed(2)} rad`);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

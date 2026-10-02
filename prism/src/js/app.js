@@ -323,6 +323,16 @@ function renderReadout(analysis, gated) {
   }
 }
 
+/** Title and ratio above the curve modes, rewritten only when the figure changes. */
+let lastHarmonicKey = '';
+function renderHarmonicHead() {
+  const fig = stage.harmonic.current;
+  if (!fig || (settings.mode !== 'lissajous' && settings.mode !== 'orbital') || fig.key === lastHarmonicKey) return;
+  lastHarmonicKey = fig.key;
+  $('harmonicTitle').textContent = fig.title;
+  $('harmonicRatio').textContent = fig.ratioText;
+}
+
 /* --------------------------------- loop ---------------------------------- */
 
 let lastFrame = performance.now();
@@ -353,6 +363,7 @@ function frame(now) {
   while (pendingStrikes.length) stage.strike(pendingStrikes.shift(), analysis);
 
   stage.draw(list, analysis, dt);
+  renderHarmonicHead();
   wheel.draw(new Set(gated.map((v) => v.pc)), played);
   renderReadout(played, gated);
   paintKeys(played);
@@ -376,6 +387,7 @@ function setMode(mode) {
   settings.mode = mode;
   stage.setMode(mode);
   $('stageWrap').classList.toggle('mode-field', mode === 'field');
+  $('stageWrap').classList.toggle('mode-curve', mode === 'lissajous' || mode === 'orbital');
   for (const btn of document.querySelectorAll('.mode')) {
     const on = btn.dataset.mode === mode;
     btn.classList.toggle('is-active', on);
@@ -503,6 +515,8 @@ function wireControls() {
     if (e.code === 'Digit1') setMode('crystal');
     else if (e.code === 'Digit2') setMode('field');
     else if (e.code === 'Digit3') setMode('prism');
+    else if (e.code === 'Digit4') setMode('lissajous');
+    else if (e.code === 'Digit5') setMode('orbital');
     else if (e.code === 'Backquote') { e.preventDefault(); $('app').classList.toggle('is-bare'); }
     else if (e.code === 'F11') { e.preventDefault(); bridge?.toggleFullscreen(); }
     else return;

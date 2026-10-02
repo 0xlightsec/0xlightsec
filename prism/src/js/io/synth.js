@@ -4,7 +4,8 @@
  * two-oscillator voice per note, straight into a shared reverb/limiter bus.
  */
 
-import { midiToFreq, clamp } from '../theory/circle.js';
+import { clamp } from '../theory/circle.js';
+import { pianoFrequency } from '../theory/piano.js';
 
 const ATTACK = 0.006;
 const DECAY = 0.18;
@@ -79,7 +80,7 @@ export class Synth {
     this.noteOff(midi, true);
 
     const now = ctx.currentTime;
-    const freq = midiToFreq(midi);
+    const freq = pianoFrequency(midi); // stretch-tuned, so sound and figure agree
     const peak = clamp(velocity, 0, 1) * 0.22;
 
     const gain = ctx.createGain();

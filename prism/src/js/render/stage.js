@@ -11,6 +11,7 @@
  */
 
 import { circleAngle, css, clamp, lerp, TAU } from '../theory/circle.js';
+import { HarmonicRenderer } from './harmonic.js';
 
 const MAX_PARTICLES = 2600;
 const FIELD_SCALE = 0.25;
@@ -33,6 +34,7 @@ export class Stage {
     this.smoothEnergy = 0;
     this.buffer = null;
     this.bufferCtx = null;
+    this.harmonic = new HarmonicRenderer();
     this.resize();
   }
 
@@ -129,6 +131,13 @@ export class Stage {
     this.rotation += this.spin * dt;
 
     const ctx = this.ctx;
+    if (this.mode === 'lissajous' || this.mode === 'orbital') {
+      // Curve modes own the whole frame: pure black, no trails, no colour field.
+      this.harmonic.update(this.mode, voices, this.smoothEnergy, dt);
+      this.harmonic.draw(ctx, this.width, this.height, this.mode, this.brightness);
+      return;
+    }
+
     ctx.globalCompositeOperation = 'source-over';
     const fade = lerp(0.55, 0.045, clamp(this.trail));
     ctx.fillStyle = `rgba(5, 6, 10, ${fade})`;

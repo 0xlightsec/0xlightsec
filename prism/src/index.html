@@ -21,6 +21,8 @@
       <button class="mode is-active" data-mode="crystal" role="tab" aria-selected="true">Crystal</button>
       <button class="mode" data-mode="field" role="tab" aria-selected="false">Field</button>
       <button class="mode" data-mode="prism" role="tab" aria-selected="false">Prism</button>
+      <button class="mode" data-mode="lissajous" role="tab" aria-selected="false">Lissajous</button>
+      <button class="mode" data-mode="orbital" role="tab" aria-selected="false">Orbital</button>
     </nav>
 
     <div class="titlebar-right">
@@ -40,6 +42,11 @@
   <main class="stage-wrap" id="stageWrap">
     <canvas id="stage"></canvas>
     <div class="stage-vignette" aria-hidden="true"></div>
+
+    <header class="harmonic-head" aria-live="polite">
+      <div class="harmonic-title" id="harmonicTitle">THE PERFECT FIFTH</div>
+      <div class="harmonic-ratio" id="harmonicRatio">3 : 2</div>
+    </header>
 
     <section class="hud hud-readout" id="hudReadout">
       <div class="chord-name" id="chordName">—</div>
@@ -204,7 +211,7 @@
           <div><dt><kbd>,</kbd><kbd>.</kbd></dt><dd>velocity</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>breakaway — release keyboard</dd></div>
           <div><dt><kbd>Enter</kbd></dt><dd>re-arm keyboard</dd></div>
-          <div><dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>output mode</dd></div>
+          <div><dt><kbd>1</kbd>…<kbd>5</kbd></dt><dd>output mode</dd></div>
           <div><dt><kbd>`</kbd></dt><dd>hide interface</dd></div>
           <div><kbd>F11</kbd><dd>fullscreen</dd></div>
         </dl>

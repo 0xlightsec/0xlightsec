@@ -55,7 +55,7 @@ note keys play notes instead of doing whatever they'd normally do.
 | `,` `.` | velocity |
 | **`Esc`** | **breakaway — release the keyboard** |
 | `Enter` | re-arm the keyboard |
-| `1` `2` `3` | crystal / field / prism |
+| `1` … `5` | crystal / field / prism / lissajous / orbital |
 | `` ` `` | hide the interface |
 | `F11` | fullscreen |
 
@@ -92,6 +92,31 @@ on-screen keys stay playable with the mouse either way.
   wash; dissonant ones separate into distinct zones.
 - **Prism** — particles fired along each note's angle, scatter widening with tension.
 
+- **Lissajous** — two notes as a glowing 2D Lissajous figure on pure black, drawn at
+  their *just* frequency ratio: play C and G and you get "THE PERFECT FIFTH · 3 : 2",
+  with the upper note labelling the vertical axis and the lower the horizontal. A few
+  slowly decaying, precessing loops nest inside one another, harmonograph-style.
+- **Orbital** — a chord as a 3D Lissajous, one axis per voice ("A MAJOR CHORD ·
+  4 : 5 : 6"), swept into a spherical shell and slowly drifting inside a glowing cube.
+  Near strands burn brighter than far ones.
+
+  Both curve modes take their ratio from whatever you play — a minor triad becomes
+  10 : 12 : 15, a dominant seventh 36 : 45 : 54 : 64 — and idle on the canonical
+  figure when nothing is held. Each axis follows its own note's envelope, so
+  releasing the top note collapses the vertical axis while the bass holds.
+
+  **The spin is the piano's.** On an oscilloscope a two-note figure rolls through
+  its phase at the rate the interval misses its just ratio. A real piano misses it
+  twice over: equal temperament, then the stretch its stiff strings force on the
+  tuning (inharmonicity — overtones run sharp, so tuners widen every octave, the
+  Railsback curve). `src/js/theory/piano.js` implements the parametric tuning model
+  from Rigaud, David & Daudet, *A Parametric Model of Piano Tuning* (DAFx 2011), and
+  the figures spin at the resulting real beat rate: a fifth at middle C rolls at
+  0.44 Hz, a major third shimmers at 2.6 Hz, and octaves roll too (0.67 Hz at middle
+  C), where textbook equal temperament would freeze them. The synth uses the same
+  tuning, so what you hear and what you see agree. Spin is capped at 6 Hz, past which
+  the screen's frame rate would alias it into noise.
+
 Palette, wheel rotation, brightness, trail and spin are all live, as are the synth's
 waveform, volume, reverb and release. Settings persist between sessions.
 
@@ -100,15 +125,21 @@ waveform, volume, reverb and release. Settings persist between sessions.
 ```
 main.js                 Electron main — window, custom prism:// scheme, permissions
 preload.js              the only bridge into the renderer
-src/js/theory/          circle.js · harmony.js · chords.js   (no DOM, unit-tested)
+src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
-src/js/render/          stage.js (three modes) · wheel.js
+src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
 src/js/app.js           wiring
 tests/theory.test.mjs   npm test
 ```
 
 `npm test` covers the wheel arithmetic, the tension ordering above, the
-consonant-collapses / dissonant-spreads colour behaviour, and chord naming.
+consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
+ratios, the piano tuning curve, and that each figure spins at its real beat rate.
+
+The piano model's treble asymptote and octave-type curve are the paper's fitted
+values; its bass asymptote and transition width are fitted per instrument there, so
+the values used here are typical choices, checked against the expected Railsback
+range (about −45 cents at A0, +36 at C8).
 
 ## Notes
 
