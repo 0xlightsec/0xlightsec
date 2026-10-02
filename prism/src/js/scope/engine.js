@@ -80,15 +80,32 @@ export class ScopeEngine {
     this.bufL = new Float32Array(HISTORY);
     this.bufR = new Float32Array(HISTORY);
 
-    this.ready = ctx.audioWorklet.addModule(new URL('./capture-worklet.js', import.meta.url)).then(() => {
+    // Live circles: generated on the audio thread, drawn through the music input.
+    // Their own tone is muted unless asked for, so a song or the mic isn't
+    // drowned out (or fed back) by a buzz.
+    this.liveTone = ctx.createGain();
+    this.liveTone.gain.value = 0;
+    this.liveTone.connect(this.master);
+    this.liveTone.connect(this.spectrum);
+    this.liveOn = false;
+    this.musicDrawn = true;
+
+    this.ready = Promise.all([
+      ctx.audioWorklet.addModule(new URL('./capture-worklet.js', import.meta.url)),
+      ctx.audioWorklet.addModule(new URL('./live-worklet.js', import.meta.url))
+    ]).then(() => {
+      this.liveNode = new AudioWorkletNode(ctx, 'prism-live', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+      this.liveNode.connect(this.liveTone);
       const node = new AudioWorkletNode(ctx, 'prism-capture', { numberOfInputs: 3, numberOfOutputs: 1, outputChannelCount: [1] });
       node.port.onmessage = (e) => this.receive(e.data);
       // Its output is silent; connecting it keeps the node pulled by the graph.
       node.connect(ctx.destination);
       this.bus.connect(node, 0, 0);
       this.trim.connect(node, 0, 1);
-      this.musicSource?.connect(node, 0, 2);
       this.captureNode = node;
+      this.liveNode.connect(node, 0, 2);
+      if (this.musicSource && this.musicDrawn) this.musicSource.connect(node, 0, 2);
+      if (this.liveOn) this.liveNode.port.postMessage({ active: true });
     });
     return ctx;
   }
@@ -195,6 +212,40 @@ export class ScopeEngine {
     return true;
   }
 
+  /* ------------------------------ live circles ----------------------------- */
+
+  /**
+   * Turn the live circles on or off. While on, a playing song is heard and
+   * analysed but not drawn: it steers the circles instead of competing with them.
+   */
+  setLive(on) {
+    this.ensure();
+    this.liveOn = on;
+    this.liveNode?.port.postMessage({ active: on });
+    const draw = !on;
+    if (this.musicSource && this.captureNode && draw !== this.musicDrawn) {
+      if (draw) this.musicSource.connect(this.captureNode, 0, 2);
+      else this.musicSource.disconnect(this.captureNode, 0, 2);
+    }
+    this.musicDrawn = draw;
+  }
+
+  setLiveTone(on) {
+    if (this.liveTone) this.liveTone.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.03);
+  }
+
+  /** Shape targets for [music circle, voice circle], and the drawing rate in Hz. */
+  sendLive(targets, f) {
+    this.liveNode?.port.postMessage({ targets, f });
+  }
+
+  /** The latest 2048 samples of the song alone, or null if nothing is loaded. */
+  readSong() {
+    if (!this.songTap) return null;
+    this.songTap.getFloatTimeDomainData(this.songBuf);
+    return this.songBuf;
+  }
+
   /** Current spectrum in dB per bin, or null before audio has started. */
   readSpectrum() {
     if (!this.spectrum) return null;
@@ -216,7 +267,12 @@ export class ScopeEngine {
       // be squashed by the generator's limiter.
       this.musicSource.connect(this.master);
       this.musicSource.connect(this.spectrum);
-      if (this.captureNode) this.musicSource.connect(this.captureNode, 0, 2);
+      // A tap on the song alone, for the live circles to follow.
+      this.songTap = ctx.createAnalyser();
+      this.songTap.fftSize = 2048;
+      this.songBuf = new Float32Array(2048);
+      this.musicSource.connect(this.songTap);
+      if (this.captureNode && this.musicDrawn) this.musicSource.connect(this.captureNode, 0, 2);
     }
     if (this.musicUrl) URL.revokeObjectURL(this.musicUrl);
     this.musicUrl = URL.createObjectURL(file);

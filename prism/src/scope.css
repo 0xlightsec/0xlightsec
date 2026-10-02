@@ -179,3 +179,6 @@
 
 .seg button.dot { padding: 4px 7px; }
 .seg button.dot i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
+
+.player .live-pill[aria-pressed="true"] { color: #ffb3ec; border-color: rgba(255, 120, 220, 0.5); background: rgba(255, 90, 210, 0.14); }
+@media (max-width: 1200px) { .player-name { display: none; } .player input[type="range"] { width: 110px; } }

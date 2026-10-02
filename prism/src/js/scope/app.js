@@ -20,6 +20,7 @@ import { ratioForSemitones, intervalTitle } from '../theory/ratios.js';
 import { nameChord } from '../theory/chords.js';
 import { wireWindowChrome, renderFocusBadge, trackFocus } from '../chrome.js';
 import { TRACKS, renderTrack, encodeWav } from './tracks.js';
+import { Driver, levelFromDb } from './live.js';
 
 const $ = (id) => document.getElementById(id);
 const VOLTS = [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005];   // per division, 1-2-5 like a real scope
@@ -46,6 +47,7 @@ const settings = {
   velocity: 0.8,
   phosphor: 'pink',
   spectrum: true,
+  liveTone: false,
   ...load()
 };
 
@@ -149,6 +151,66 @@ function fitted(ch, count, radiusDiv) {
   const target = Math.max(peak, 0.003) / radiusDiv;
   fitScale[ch.id] += (target - fitScale[ch.id]) * (target > fitScale[ch.id] ? 0.4 : 0.04);
   return { ...ch, voltsPerDiv: fitScale[ch.id] };
+}
+
+/* ------------------------------- live circles ------------------------------ */
+
+const musicDriver = new Driver();
+const voiceDriver = new Driver();
+let liveOn = false;
+let liveSources = '';
+
+/** What the music is doing: a playing song if there is one, else the keys held. */
+function measureMusic() {
+  const held = engine.held;
+  let level = 0;
+  let midi = null;
+  if (engine.musicPlaying) {
+    const buf = engine.readSong();
+    if (buf) {
+      level = levelFromDb(toDb(rms(buf)));
+      const hit = level > 0.05 ? detectPitch(buf, engine.sampleRate) : null;
+      if (hit && hit.clarity > 0.8 && hit.hz > 50 && hit.hz < 1000) midi = freqToMidi(hit.hz);
+    }
+  }
+  if (held.length) {
+    const vel = Math.max(...held.map((m) => engine.voices.get(m)?.velocity ?? 0.8));
+    level = Math.max(level, 0.45 + 0.35 * vel);
+    midi = held[0];
+  }
+  return { level, midi };
+}
+
+function measureVoice(now) {
+  if (!engine.micOn) return { level: 0, midi: null };
+  const n = engine.buf2.length;
+  return {
+    level: levelFromDb(toDb(rms(engine.buf2, n - PITCH_WINDOW, n))),
+    midi: voiceLive(now) ? freqToMidi(voice.hz) : null
+  };
+}
+
+function updateLive(now, dt) {
+  if (!liveOn || !running || !engine.ctx) return;
+  const music = measureMusic();
+  const sung = measureVoice(now);
+  const held = engine.held;
+  // The drawing rate follows the keys when you play (audible if Circle tone is
+  // on); otherwise a steady 110 Hz, the rate in the Two Circles reel.
+  const f = held.length ? pianoFrequency(held[0]) : 110;
+  engine.sendLive([musicDriver.update(music, dt), voiceDriver.update(sung, dt)], f);
+  const active = [music.level > 0.05 && 'music', sung.level > 0.05 && 'voice'].filter(Boolean);
+  liveSources = active.length ? `live · ${active.join(' + ')}` : 'live · play, sing or pick a track';
+}
+
+function setLive(on) {
+  liveOn = on;
+  engine.setLive(on);
+  engine.setLiveTone(on && settings.liveTone);
+  $('liveBtn').setAttribute('aria-pressed', String(on));
+  $('liveToneBtn').hidden = !on;
+  if (on) setDisplay('music');
+  else $('musicName').textContent = engine.musicName ? 'built in' : 'or drop a stereo file on the screen';
 }
 
 /* --------------------------------- readout -------------------------------- */
@@ -349,6 +411,8 @@ function frame(now) {
   st.classList.toggle('is-trig', triggered && settings.display === 'yt');
   st.classList.toggle('is-auto', !triggered && settings.display === 'yt');
 
+  updateLive(now, dt);
+
   // A stopped capture freezes the spectrum too: no new data, and the peaks hold.
   if (settings.spectrum) {
     spectrum.update(running && engine.ctx ? engine.readSpectrum() : null, sr, dt);
@@ -362,7 +426,8 @@ function frame(now) {
     $('scopeHint').innerHTML = music
       ? 'Choose a track above, or drop a stereo audio file here — files made for oscilloscopes draw pictures'
       : "Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing";
-    $('scopeHint').classList.toggle('is-hidden', music ? !!engine.musicName : engine.voices.size > 0 || engine.micOn);
+    $('scopeHint').classList.toggle('is-hidden', music ? !!engine.musicName || liveOn : engine.voices.size > 0 || engine.micOn);
+    if (liveOn) $('musicName').textContent = liveSources;
     renderPlayer();
   }
 
@@ -616,6 +681,14 @@ function wirePlayer() {
     playTrack(pick.value);
   });
   engine.onMusicEnded = playNext;
+  $('liveBtn').addEventListener('click', () => setLive(!liveOn));
+  $('liveToneBtn').setAttribute('aria-pressed', String(settings.liveTone));
+  $('liveToneBtn').addEventListener('click', () => {
+    settings.liveTone = !settings.liveTone;
+    $('liveToneBtn').setAttribute('aria-pressed', String(settings.liveTone));
+    engine.setLiveTone(liveOn && settings.liveTone);
+    save();
+  });
   $('musicFile').addEventListener('change', (e) => {
     playFile(e.target.files[0]);
     e.target.value = ''; // so choosing the same file again still fires

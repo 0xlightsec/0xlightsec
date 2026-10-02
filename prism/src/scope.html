@@ -68,6 +68,8 @@
           </select>
           <input type="file" id="musicFile" accept="audio/*,.wav,.flac,.mp3,.ogg,.opus,.m4a,.aac" hidden />
           <button class="pill" id="musicPlay" disabled>Play</button>
+          <button class="pill live-pill" id="liveBtn" aria-pressed="false" title="Circles that spin and morph with the music and your voice">Live circles</button>
+          <button class="pill" id="liveToneBtn" aria-pressed="false" hidden title="Hear the circles' own tone">Circle tone</button>
           <span class="player-name" id="musicName">or drop a stereo file on the screen</span>
           <input type="range" id="musicSeek" min="0" max="1000" value="0" disabled aria-label="Position" />
           <span class="player-time" id="musicTime">0:00</span>

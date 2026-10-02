@@ -300,4 +300,50 @@ check('WAV encoding has the right header and size', async () => {
   const blob = encodeWav(new Float32Array(100), new Float32Array(100), 48000);
   assert.equal(blob.size, 44 + 400);
 });
+
+const live = await import('../src/js/scope/live.js');
+console.log('\nlive circles');
+check('petals step with the Circle of Fifths: C 2, G 3, D 4 … and wrap', () => {
+  assert.equal(live.lobesFor(60), 2);
+  assert.equal(live.lobesFor(67), 3);
+  assert.equal(live.lobesFor(62), 4);
+  for (let m = 36; m < 96; m++) assert.ok(live.lobesFor(m) >= 2 && live.lobesFor(m) <= 7);
+});
+check('louder spins faster and blooms further; rising pitch spins one way, falling the other', () => {
+  const quiet = new live.Driver(), loud = new live.Driver();
+  let q, l;
+  for (let i = 0; i < 60; i++) { q = quiet.update({ level: 0.1, midi: 60 }, 1 / 60); l = loud.update({ level: 0.9, midi: 60 }, 1 / 60); }
+  assert.ok(Math.abs(l.spin) > 2 * Math.abs(q.spin) && l.m > 2 * q.m, `quiet ${q.spin.toFixed(2)}/${q.m.toFixed(2)} loud ${l.spin.toFixed(2)}/${l.m.toFixed(2)}`);
+  const d = new live.Driver();
+  d.update({ level: 0.5, midi: 60 }, 1 / 60);
+  const up = d.update({ level: 0.5, midi: 64 }, 1 / 60).spin;
+  const down = d.update({ level: 0.5, midi: 57 }, 1 / 60).spin;
+  assert.ok(up > 0 && down < 0, `up ${up} down ${down}`);
+});
+check('an onset kicks the spin and size', () => {
+  const d = new live.Driver();
+  for (let i = 0; i < 60; i++) d.update({ level: 0.2, midi: 60 }, 1 / 60);
+  const before = d.update({ level: 0.2, midi: 60 }, 1 / 60);
+  const hit = d.update({ level: 0.8, midi: 60 }, 1 / 60);
+  assert.ok(hit.scale > before.scale + 0.2 && Math.abs(hit.spin) > Math.abs(before.spin) + 2);
+});
+check('rendered circles stay on screen, never click, and sit at their two centres', () => {
+  const g = new live.LiveCircles(48000);
+  const n = 48000;
+  const L = new Float32Array(n), R = new Float32Array(n);
+  // Hammer it with changing targets, as live input would.
+  for (let block = 0; block < n / 128; block++) {
+    if (block % 20 === 0) g.setTargets([{ k: 2 + (block / 20) % 6, m: 0.55, spin: 6, scale: 1.45 }, { k: 7 - (block / 20) % 6, m: 0.55, spin: -6, scale: 1.45 }], 110 + block % 100);
+    g.render(L.subarray(block * 128), R.subarray(block * 128), 128);
+  }
+  let step = 0, peak = 0, sumL = 0, sumR = 0, nL = 0;
+  for (let i = 1; i < n; i++) {
+    step = Math.max(step, Math.abs(L[i] - L[i - 1]), Math.abs(R[i] - R[i - 1]));
+    peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
+  }
+  assert.ok(peak <= 0.92 + 1e-6, `peak ${peak}`);
+  assert.ok(step < 0.35, `largest sample step ${step.toFixed(3)}`);
+  const low = [...L].filter((x) => x < 0).length / n;
+  assert.ok(low > 0.35 && low < 0.65, `time split between circles ${low.toFixed(2)}`);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

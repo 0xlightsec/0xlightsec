@@ -112,6 +112,15 @@ readout below.
   you hear. Like a real CRT, the beam is
   dim where it moves fast, so the jumps between parts of a picture nearly vanish
   while the slow strokes burn bright.
+- **Live circles** (in Music mode): two oscilloscope circles generated live that
+  spin and morph with what you play and sing. The lower-left one follows the
+  music — a playing track, or keys you hold — and the upper-right one follows
+  your voice. Louder spins faster and blooms the circle into a flower; each note
+  sets the petal count, one more per step around the Circle of Fifths (C 2, G 3,
+  D 4 …), crossfading between notes; a rising melody spins one way and a falling
+  one the other; a sudden loud note kicks both. A track playing underneath is
+  heard and followed but not drawn. The circles' own tone is muted unless you turn
+  on **Circle tone**, so it doesn't drown the music or feed back into the mic.
 - **Spectrum analyzer** along the bottom of the screen, on a log axis from 20 Hz
   to 20 kHz: a red fill for the energy, a white line for the live spectrum and a
   fainter one for peaks that fall back slowly, smoothed over a sixth of an octave.
@@ -210,7 +219,8 @@ preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
-src/js/scope/           engine.js · capture-worklet.js · display.js · measure.js · app.js
+src/js/scope/           engine.js · capture-worklet.js · live.js · live-worklet.js ·
+                        tracks.js · display.js · measure.js · app.js
 src/js/chrome.js        window chrome shared by both pages
 src/js/app.js           wiring
 tests/theory.test.mjs   npm test

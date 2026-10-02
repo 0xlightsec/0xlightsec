@@ -109,6 +109,10 @@ async function drive() {
       || await evaluate(`document.getElementById('musicPick').selectedOptions[0].textContent + ' ' + document.getElementById('musicTime').textContent`);
     check(/^Spinning Cube 0:0[1-9]/.test(playing), 'built-in music track plays', playing);
 
+    await evaluate(`document.getElementById('liveBtn').click(), true`);
+    const live = await waitFor(`(() => { const t = document.getElementById('musicName').textContent; return t.startsWith('live') && t; })()`, 10000);
+    check(String(live).startsWith('live'), 'live circles start (audio-worklet module under the CSP)', String(live));
+
     const shot = await send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(SHOT, Buffer.from(shot.result.data, 'base64'));
     check(errors.length === 0, 'no errors in the page', errors.join(' | '));
