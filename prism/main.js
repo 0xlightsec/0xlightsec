@@ -54,6 +54,7 @@ function createWindow() {
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     trafficLightPosition: { x: 16, y: 18 },
+    icon: path.join(__dirname, 'build', 'icon.png'), // Linux window icon; Windows uses the exe's own
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -89,6 +90,19 @@ function createWindow() {
 function openOutside(target) {
   if (isExternalAllowed(target)) shell.openExternal(target);
 }
+
+// Out of the box Electron fetches Hunspell dictionaries from Google
+// (redirector.gvt1.com) on every launch, even with spellcheck off for the page;
+// measured, only clearing the languages stops it. An offline app has no reason to
+// call out. (The language list is a no-op on macOS, which uses the OS speller.)
+app.on('session-created', (s) => {
+  s.setSpellCheckerEnabled(false);
+  try {
+    s.setSpellCheckerLanguages([]);
+  } catch {
+    /* not supported on this platform */
+  }
+});
 
 // Applies to every web contents, so nothing created later slips past it.
 app.on('web-contents-created', (_e, contents) => {

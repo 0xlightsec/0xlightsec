@@ -6,13 +6,28 @@ other harmonically get colours that sit next to each other visually. Play a fift
 the screen resolves to one colour and white. Play a tritone and it splits into
 opposites.
 
+**Windows:** download `PRISM-win32-x64.zip`, unzip it anywhere, and run
+`PRISM.exe` — no install, no Node. It isn't code-signed, so the first time
+Windows SmartScreen will say it "protected your PC": click **More info → Run
+anyway**.
+
+**From source** (any platform):
+
 ```
 cd prism
 npm install
 npm start
 ```
 
-Electron app, no build step.
+**Build the Windows app yourself:** `npm run package:win` (or `package:linux`)
+writes `dist/PRISM-win32-x64.zip`. The packaged app runs from a single asar
+archive and has Electron's fuses flipped, so it can't be turned into a
+general-purpose Node runtime: `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` and
+`--inspect` are ignored and only the bundled archive is loaded. ASAR integrity
+validation is left off — it needs integrity data in the executable, and a build
+that refuses to start couldn't be checked without a Windows machine. The app makes
+no network calls: out of the box Electron fetches spellcheck dictionaries from
+Google on every launch, and that is switched off.
 
 ## How the mapping works
 
@@ -179,6 +194,8 @@ waveform, volume, reverb and release. Settings persist between sessions.
 ```
 main.js                 Electron main — window, prism:// scheme, guards
 security.js             URL, file and permission rules (Electron-free, tested)
+scripts/package.mjs     packaged build: asar, fuses, zip
+build/                  app icon (PNG for Linux, ICO for Windows)
 preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
