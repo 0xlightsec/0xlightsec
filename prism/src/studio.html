@@ -25,6 +25,7 @@
 
     <div class="titlebar-right">
       <label class="master-vol" title="Volume"><span>Vol</span><input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume" /></label>
+      <button class="rec-song roll-btn" id="rollBtn" aria-pressed="false" title="Draw notes on a grid (N)">Piano roll</button>
       <button class="rec-song loops-btn" id="loopsBtn" aria-expanded="false" title="Save and load your loops (Ctrl+S saves)">Loops</button>
       <button class="rec-song" id="recBtn" aria-pressed="false" title="Record everything you hear to a file">
         <span class="rec-dot"></span><span id="recLabel">Record song</span>
@@ -60,6 +61,23 @@
         <canvas id="spectrum" aria-label="Spectrum analyzer"></canvas>
       </div>
     </div>
+    <section class="roll" id="roll" hidden aria-label="Piano roll">
+      <header class="roll-head">
+        <button class="roll-play" id="rollPlay" aria-pressed="false" title="Play the pattern, in time with the beat and the loop">▶ Play</button>
+        <select id="rollSound" aria-label="Pattern sound" title="The pattern's own sound"></select>
+        <div class="seg roll-seg" id="rollBars" aria-label="Pattern length"></div>
+        <div class="seg roll-seg" id="rollSnap" aria-label="Snap"></div>
+        <button class="toggle" id="rollToLoop" aria-pressed="false" title="Also record the pattern when you record or add a loop layer">Into loop</button>
+        <span class="roll-spacer"></span>
+        <button class="pill" id="rollQuantize" title="Move every note onto the grid">Quantize</button>
+        <button class="pill" id="rollUndo" title="Undo (Ctrl+Z while the roll is open)">Undo</button>
+        <button class="pill" id="rollRedo" title="Redo (Ctrl+Y)">Redo</button>
+        <button class="pill" id="rollClear" title="Clear every note (click twice)">Clear</button>
+        <button class="icon-btn" id="rollClose" aria-label="Close the piano roll (N)">✕</button>
+      </header>
+      <canvas id="rollCanvas"></canvas>
+      <footer class="roll-foot">Click to draw · drag to move · drag a note's end to resize · right-click to delete · drag the velocity lane · lit rows are in key · chord mode draws chords</footer>
+    </section>
     <div class="start-veil" id="startVeil" hidden>
       <button class="start-btn" id="startBtn">Start the studio</button>
     </div>

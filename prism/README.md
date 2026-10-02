@@ -88,6 +88,16 @@ make a song, with no setup. The mic switches on by itself.
   layer's number (in the Loop panel or above the knobs) and the knobs turn just
   that layer: crush the drums you beatboxed, filter one layer away, or **Mute** it.
   Undo and Redo keep each layer's settings.
+- **Piano roll** (titlebar, or `N`): draw notes on a grid like FL Studio. Click to
+  draw (the length of the last note), drag to move, drag a note's end to resize,
+  right-click (or right-drag) to delete, and drag the velocity lane under a note to
+  make it softer or harder. Rows in your key are lit, chord mode draws whole
+  chords, and notes are coloured by the Circle of Fifths. Patterns are 1, 2, 4 or
+  8 bars, snapping to 1/4 to 1/32 notes, with Quantize, Undo and Redo (`Ctrl+Z` /
+  `Ctrl+Y` while it's open) and Clear. **Play** runs it in time with the beat (or
+  the loop) through its own sound and its own effects (**Roll** above the knobs).
+  It isn't recorded into loops unless you turn on **Into loop**. The pattern is
+  kept between sessions and saved with your loops.
 - **Loops** in the titlebar: name your loop and save it (or press `Ctrl+S`); load
   any saved loop with one click. A save keeps every layer and its effects, the beat
   and tempo, your sound, key and voice settings. **File** saves one as a `.prism`
@@ -298,7 +308,8 @@ src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
 src/js/studio/          engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
                         sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·
-                        perf-worklet.js · project.js · library.js · knob.js · app.js
+                        perf-worklet.js · project.js · library.js · roll.js ·
+                        roll-view.js · knob.js · app.js
 src/js/scope/           engine.js · capture-worklet.js · live.js · live-worklet.js ·
                         tracks.js · display.js · measure.js · app.js
 src/js/chrome.js        window chrome shared by every page
@@ -312,7 +323,7 @@ ratios, the piano tuning curve, that each figure spins at its real beat rate, an
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
 looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per
 layer, saving and loading), the .prism file format, the stutter and tape-stop
-pads, the pitch shifter and autotune, the effect curves, the beat patterns and
+pads, the pitch shifter and autotune, the piano roll's pattern, undo and timing, the effect curves, the beat patterns and
 kits, the sound library, chord mode, and the main process's URL, path and permission rules.
 
 The piano model's treble asymptote and octave-type curve are the paper's fitted

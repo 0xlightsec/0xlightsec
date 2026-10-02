@@ -658,4 +658,51 @@ check('the tape knob is silent at zero and wobbles more as it turns', () => {
   assert.equal(zero.wow + zero.flutter, 0); assert.equal(zero.tone, 20000);
   assert.ok(full.wow > 0.002 && full.tone < 5000);
 });
+
+const roll = await import('../src/js/studio/roll.js');
+console.log('\npiano roll');
+check('notes repeat with the pattern, each landing once, wrapping cleanly at the end', () => {
+  const notes = [{ start: 0, length: 1, midi: 60 }, { start: 15, length: 1, midi: 64 }, { start: 40, length: 2, midi: 67 }];
+  const hits = roll.notesBetween(notes, 16, 14, 34).map((h) => `${h.note.midi}@${h.step}`);
+  assert.deepEqual(hits, ['64@15', '60@16', '64@31', '60@32']);    // 67 is past a 1-bar pattern: kept, not played
+  let all = [];
+  for (let i = 0; i * 0.37 < 64; i++) all.push(...roll.notesBetween(notes, 32, i * 0.37, Math.min(64, (i + 1) * 0.37)));
+  assert.deepEqual(all.map((h) => h.step), [0, 15, 32, 47]);       // tiny windows: still exactly once each
+});
+check('snapping: a click lands on the cell it is in, a drag moves by whole cells', () => {
+  assert.equal(roll.snapDown(5.9, 4), 4); assert.equal(roll.snapDown(5.9, 0.5), 5.5);
+  assert.equal(roll.snapNearest(2.6, 2), 2); assert.equal(roll.snapNearest(3.1, 2), 4);
+});
+check('pattern edits undo and redo as whole gestures; a gesture that changes nothing leaves no step', () => {
+  const p = new roll.Pattern();
+  p.checkpoint(); const a = p.add({ start: 0, length: 2, midi: 60 }); p.settle();
+  p.checkpoint(); a.start = 4; a.midi = 62; p.settle();
+  p.checkpoint(); p.settle();                                      // a click that moved nothing
+  assert.equal(p.past.length, 2);
+  p.undo(); assert.deepEqual([p.notes[0].start, p.notes[0].midi], [0, 60]);
+  p.undo(); assert.equal(p.notes.length, 0);
+  p.redo(); p.redo(); assert.deepEqual([p.notes[0].start, p.notes[0].midi], [4, 62]);
+  p.checkpoint(); p.quantize(4); p.settle(); assert.equal(p.past.length, 2, 'already on the grid: no step');
+});
+check('a pattern saves and loads; anything malformed is dropped', () => {
+  const p = new roll.Pattern(); p.setBars(4);
+  p.add({ start: 1.5, length: 0.5, midi: 72, velocity: 0.4 });
+  const q = new roll.Pattern(); q.load(JSON.parse(JSON.stringify(p.toJSON())));
+  assert.equal(q.bars, 4); assert.deepEqual(q.toJSON(), p.toJSON());
+  q.load({ bars: 3, notes: [{ start: 'x', length: 1, midi: 60 }, { start: 0, length: 1, midi: 200 }] });
+  assert.equal(q.bars, 2); assert.equal(q.notes.length, 1); assert.equal(q.notes[0].midi, roll.ROLL_HIGH);
+});
+check('the player books each note once, on the clock, as time goes by', () => {
+  const ctx = { currentTime: 0 };
+  const booked = [];
+  const synth = { schedule: (midi, v, at, dur) => booked.push({ midi, at: +at.toFixed(6), dur }), cancelBooked() {} };
+  const p = new roll.Pattern(); p.setBars(1);
+  p.add({ start: 0, length: 4, midi: 60 }); p.add({ start: 8, length: 2, midi: 67 });
+  const player = new roll.RollPlayer(ctx, synth, p, () => ({ origin: 0.5, bpm: 120 }));  // a sixteenth = 0.125 s
+  player.start(); clearInterval(player.timer);
+  for (let t = 0; t < 4.6; t += 0.025) { ctx.currentTime = t; player.tick(); }
+  assert.deepEqual(booked.map((b) => `${b.midi}@${b.at}`), ['60@0.5', '67@1.5', '60@2.5', '67@3.5', '60@4.5']);
+  assert.ok(Math.abs(booked[0].dur - 0.48) < 1e-9, 'held for its length (a hair short, so repeats re-strike)');
+  ctx.currentTime = 1.25; assert.equal(player.position(), 6);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

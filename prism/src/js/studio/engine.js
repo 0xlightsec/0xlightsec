@@ -1,7 +1,9 @@
 /**
  * Audio for the Studio.
  *
- *   keys ─▶ synth ──┬──────────────────────────────▶ live FX ──────┐
+ *   roll ─▶ synth ─┬───────────────────────────────▶ roll FX ──────┐
+ *                  └─ (only if "into loop") ─┐                       │
+ *   keys ─▶ synth ──┬──────────────────────────────▶ live FX ──────┤
  *                   └─ (input-latency delay) ─┐                     ├─▶ mix ─▶ pads ─▶ limiter ─▶ master ─▶ speakers
  *   mic ─▶ trim ─▶ pitch/tune ─┬─ voice-to-loop ┴─▶ looper ─┬─▶ layer 1 FX ─┤   (stutter,
  *                              │                            ├─▶ layer 2 FX ─┤    tape stop)
@@ -28,6 +30,7 @@ import { FxChain, SpaceBus, FX_DEFAULTS } from './fx.js';
 import { MAX_LAYERS } from './looper.js';
 import { Drums, barSeconds, stepSeconds, fitTempo, TEMPO_MIN, TEMPO_MAX } from './drums.js';
 import { tuneRatio } from './voice-fx.js';
+import { Pattern, RollPlayer } from './roll.js';
 import { StudioSynth } from './sounds.js';
 
 const HISTORY = 16384;
@@ -51,6 +54,9 @@ export class StudioEngine {
     this.voicePitch = 0; // semitones
     this.voiceTune = 0;  // 0 = off, 1 = hard
     this.voiceRatio = 1;
+    this.pattern = new Pattern();
+    this.rollOrigin = 0;
+    this.rollToLoop = false;
   }
 
   get sampleRate() {
@@ -85,6 +91,7 @@ export class StudioEngine {
     this.space = new SpaceBus(ctx, this.mix);
     this.liveFx = new FxChain(ctx, this.space, this.mix);
     this.layerFx = Array.from({ length: MAX_LAYERS }, () => new FxChain(ctx, this.space, this.mix));
+    this.rollFx = new FxChain(ctx, this.space, this.mix);
     for (const chain of this.chains) chain.setTempo(this.bpm);
 
     this.synthBus = ctx.createGain();
@@ -101,6 +108,17 @@ export class StudioEngine {
     this.keysToLoop = ctx.createDelay(0.5);
     this.synthBus.connect(this.keysToLoop).connect(this.loopIn);
 
+    // The piano roll: its own synth and effects, into the loop only when asked.
+    this.rollBus = ctx.createGain();
+    this.rollBus.connect(this.rollFx.input);
+    this.rollSend = ctx.createGain();
+    this.rollSend.gain.value = this.rollToLoop ? 1 : 0;
+    this.rollBus.connect(this.rollSend).connect(this.keysToLoop);
+    this.rollSynth = new StudioSynth(ctx, this.rollBus);
+    this.rollSynth.sound = 'pluck';
+    this.rollSynth.bpm = this.bpm;
+    this.roll = new RollPlayer(ctx, this.rollSynth, this.pattern, () => this.rollClock());
+
     this.trim = ctx.createGain();
     this.trim.gain.value = 1.4;
     this.voiceSend = ctx.createGain();
@@ -116,6 +134,7 @@ export class StudioEngine {
     // What the music circle follows: keys, loop and beat, before the FX.
     this.musicTap = ctx.createGain();
     this.synthBus.connect(this.musicTap);
+    this.rollBus.connect(this.musicTap);
     this.drums.out.connect(this.musicTap);
 
     this.spectrum = ctx.createAnalyser();
@@ -290,8 +309,55 @@ export class StudioEngine {
     this.synth.shape[name] = value;
   }
 
+  /** Notes sounding now, from the keys and the piano roll, lowest first. */
   get held() {
-    return this.synth?.held ?? [];
+    if (!this.synth) return [];
+    const roll = this.rollSynth.sounding(this.ctx.currentTime);
+    return roll.length ? [...this.synth.held, ...roll].sort((a, b) => a - b) : this.synth.held;
+  }
+
+  /* ------------------------------- piano roll -------------------------------- */
+
+  /** Where the pattern's step 0 is: on the beat, else the loop, else when it started. */
+  rollClock() {
+    if (this.drums.playing) return { origin: this.drums.origin, bpm: this.bpm };
+    if (this.hasLoop && this.loop.length) return { origin: this.loop.start / this.sampleRate, bpm: this.bpm };
+    return { origin: this.rollOrigin, bpm: this.bpm };
+  }
+
+  setRollPlaying(on) {
+    this.start();
+    if (on && !this.roll.playing) {
+      this.rollOrigin = this.ctx.currentTime + 0.05;
+      this.roll.start();
+    } else if (!on) this.roll.stop();
+  }
+
+  get rollPlaying() {
+    return !!this.roll?.playing;
+  }
+
+  setRollSound(name) {
+    this.start();
+    this.rollSynth.cancelBooked();
+    this.rollSynth.sound = name;
+    if (this.roll.playing) this.roll.booked = this.ctx.currentTime; // rebook with the new sound
+  }
+
+  setRollToLoop(on) {
+    this.rollToLoop = on;
+    if (this.rollSend) this.rollSend.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.01);
+  }
+
+  /** Hear a note in the roll's sound: held (on = true / false) or a short blip. */
+  previewRoll(midi, on) {
+    this.start();
+    const id = `roll-preview:${midi}`;
+    if (on === false) this.rollSynth.noteOff(id);
+    else {
+      this.rollSynth.noteOn(id, [midi], 0.7);
+      if (on !== true) setTimeout(() => this.rollSynth.noteOff(id), 180);
+    }
   }
 
   /* --------------------------------- loop ---------------------------------- */
@@ -409,10 +475,18 @@ export class StudioEngine {
   }
 
   applyTempo(bpm) {
+    const old = this.bpm;
     this.bpm = Math.round(Math.min(TEMPO_MAX, Math.max(TEMPO_MIN, bpm)) * 10) / 10;
     this.drums?.setTempo(this.bpm);
     for (const chain of this.chains) chain.setTempo(this.bpm);
     if (this.synth) this.synth.bpm = this.bpm;
+    if (this.rollSynth) this.rollSynth.bpm = this.bpm;
+    // A pattern running on its own clock keeps its place through the change.
+    if (this.ctx && this.roll?.playing && !this.drums.playing && !(this.hasLoop && this.loop.length)) {
+      const now = this.ctx.currentTime;
+      const at = (now - this.rollOrigin) / stepSeconds(old);
+      this.rollOrigin = now - at * stepSeconds(this.bpm);
+    }
   }
 
   /** Tell the looper where the bars are, so a take snaps to them. */
@@ -431,13 +505,15 @@ export class StudioEngine {
 
   /** Every effects chain: the live one, then one per layer slot. */
   get chains() {
-    return this.liveFx ? [this.liveFx, ...this.layerFx] : [];
+    return this.liveFx ? [this.liveFx, this.rollFx, ...this.layerFx] : [];
   }
 
   /** The chain for 'live' or a layer number (0 = the first take). */
   chain(target) {
     this.start();
-    return target === 'live' ? this.liveFx : this.layerFx[target];
+    if (target === 'live') return this.liveFx;
+    if (target === 'roll') return this.rollFx;
+    return this.layerFx[target];
   }
 
   fxValues(target) {

@@ -6,6 +6,8 @@
  *   Loop    one button: record, loop, add layers (Space); Undo, Redo and Clear
  *   Beat    nine grooves from lo-fi to hyperpop and punk; loops snap to its bars
  *   Pads    hold to stutter or tape-stop everything (Q, R, V)
+ *   Roll    a piano roll (N): draw notes on a grid, played in time with its own
+ *           sound and effects
  *   Loops   save and load whole loops in the app, or as .prism files
  *   Sound   twenty sounds in five groups, shaped with Tone, Attack and Release
  *   Keys    chord mode (one key = one chord that fits), key and octave
@@ -21,6 +23,8 @@ import { BEATS, STEPS, TEMPO_MIN, TEMPO_MAX } from './drums.js';
 import { filterSetting, crushBits, levelGain, FX_DEFAULTS } from './fx.js';
 import { encodeProject, decodeProject, resample, defaultName, fileNameFor } from './project.js';
 import { saveLoop, listLoops, loadLoop, deleteLoop } from './library.js';
+import { PATTERN_BARS, SNAPS } from './roll.js';
+import { RollView } from './roll-view.js';
 import { Knob } from './knob.js';
 import { ScopeDisplay, SpectrumView, PHOSPHORS } from '../scope/display.js';
 import { Driver, levelFromDb } from '../scope/live.js';
@@ -64,6 +68,7 @@ const settings = {
   voiceToLoop: true,
   voicePitch: 0.5, // knob positions: centre = no shift
   voiceTune: 0,
+  roll: null,
   volume: 0.8,
   fx: { ...FX_DEFAULTS },
   ...load()
@@ -71,12 +76,23 @@ const settings = {
 if (!(settings.sound in SOUNDS)) settings.sound = 'keys';
 settings.fx = { ...FX_DEFAULTS, ...settings.fx, mute: false };
 settings.shape = { ...SHAPE_DEFAULT, ...settings.shape };
+settings.roll = {
+  pattern: { bars: 2, notes: [] },
+  sound: 'pluck',
+  snap: 1,
+  toLoop: false,
+  ...settings.roll,
+  fx: { ...FX_DEFAULTS, space: 0.2, ...settings.roll?.fx }
+};
+if (!(settings.roll.sound in SOUNDS)) settings.roll.sound = 'pluck';
+if (!SNAPS.some((s) => s.steps === settings.roll.snap)) settings.roll.snap = 1;
 if (!(settings.lastBeat in BEATS)) settings.lastBeat = 'groove';
 
 const engine = new StudioEngine();
 engine.bpm = settings.bpm;
 engine.volume = settings.volume;
 engine.voiceToLoop = settings.voiceToLoop;
+engine.pattern.load(settings.roll.pattern);
 
 const display = new ScopeDisplay($('grid'), $('beam'));
 display.setGrid(false);
@@ -471,7 +487,7 @@ function selectFxTarget(target) {
   $('muteBtn').setAttribute('aria-pressed', String(!!values.mute));
   $('muteBtn').hidden = target === 'live';
   $('fxPanel').classList.toggle('is-layer', target !== 'live');
-  $('fxWho').textContent = target === 'live' ? 'what you play' : `layer ${target + 1} only`;
+  $('fxWho').textContent = target === 'live' ? 'what you play' : target === 'roll' ? 'the piano roll' : `layer ${target + 1} only`;
   renderFxTargets(keptLayers(engine.loop));
   $('loopLayers').dataset.key = ''; // repaint the dots with the new selection
   renderLayers(engine.loop);
@@ -492,15 +508,15 @@ function renderFxTargets(kept) {
     seg.appendChild(b);
   };
   add('Live', 'live', 'Effects on what you play now; new layers start with these');
+  add('Roll', 'roll', "The piano roll's own effects");
   for (let i = 0; i < kept; i++) add(String(i + 1), i, `Layer ${i + 1}'s own effects`);
 }
 
 function setFx(name, value) {
   engine.setFx(fxTarget, name, value);
-  if (fxTarget === 'live') {
-    settings.fx[name] = value;
-    save();
-  }
+  if (fxTarget === 'live') settings.fx[name] = value;
+  else if (fxTarget === 'roll') settings.roll.fx[name] = value;
+  save();
 }
 
 function formatLevel(v) {
@@ -582,6 +598,7 @@ function frame(now) {
     const n = engine.bufL.length;
     if (rms(engine.bufL, n - count, n) + rms(engine.bufR, n - count, n) > 0.002) display.drawMusic(engine.bufL, engine.bufR, count, 1);
   }
+  if (rollOpen()) rollView.draw();
   spectrum.update(engine.running ? engine.readSpectrum() : null, engine.sampleRate, dt);
   spectrum.draw();
   renderLoopRing();
@@ -717,6 +734,10 @@ function wire() {
     if (fxTarget === 'live') return;
     const on = !engine.fxValues(fxTarget).mute;
     engine.setFx(fxTarget, 'mute', on);
+    if (fxTarget === 'roll') {
+      settings.roll.fx.mute = on;
+      save();
+    }
     $('muteBtn').setAttribute('aria-pressed', String(on));
     renderLayers(engine.loop);
   });
@@ -775,6 +796,7 @@ function wire() {
   });
 
   wireLibrary();
+  wireRoll();
 
   $('recBtn').addEventListener('click', toggleRecord);
   $('breakawayKey').addEventListener('click', () => keys.toggleCapture());
@@ -793,12 +815,15 @@ function wire() {
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     // The usual undo and redo, alongside the studio's own keys.
     if (e.ctrlKey || e.metaKey) {
+      // With the piano roll open, undo and redo are the roll's.
       if (e.code === 'KeyZ') {
         e.preventDefault();
-        loop(e.shiftKey ? 'redo' : 'undo');
+        if (rollOpen()) rollHistory(e.shiftKey ? 'redo' : 'undo');
+        else loop(e.shiftKey ? 'redo' : 'undo');
       } else if (e.code === 'KeyY') {
         e.preventDefault();
-        loop('redo');
+        if (rollOpen()) rollHistory('redo');
+        else loop('redo');
       } else if (e.code === 'KeyS') {
         e.preventDefault();
         openLibrary(true);
@@ -814,7 +839,9 @@ function wire() {
       loop(e.shiftKey ? 'redo' : 'undo');
     } else if (e.code === 'Delete') {
       e.preventDefault();
-      loop('clear');
+      if (!rollOpen()) loop('clear'); // in the roll, notes are deleted with a right-click
+    } else if (e.code === 'KeyN' && !e.repeat) {
+      toggleRoll();
     } else if (e.code === 'KeyC' && !e.repeat) {
       setChords(!settings.chords);
     } else if (e.code === 'KeyB' && !e.repeat) {
@@ -829,6 +856,142 @@ function wire() {
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space' && keys.active) e.preventDefault();
   });
+}
+
+/* -------------------------------- piano roll -------------------------------- */
+
+const rollView = new RollView($('rollCanvas'), engine.pattern, {
+  snap: () => settings.roll.snap,
+  key: () => settings.key,
+  chords: () => settings.chords,
+  chordFor: (midi) => chordFor(midi, settings.key),
+  playhead: () => engine.roll?.position() ?? null,
+  preview: (midi, on) => engine.previewRoll(midi, on),
+  changed: () => saveRoll()
+});
+
+const rollOpen = () => !$('roll').hidden;
+
+function toggleRoll(open = !rollOpen()) {
+  $('roll').hidden = !open;
+  $('rollBtn').setAttribute('aria-pressed', String(open));
+  $('pads').hidden = open;
+  if (open) touched = true;
+}
+
+function saveRoll() {
+  settings.roll.pattern = engine.pattern.toJSON();
+  $('rollUndo').disabled = !engine.pattern.past.length;
+  $('rollRedo').disabled = !engine.pattern.future.length;
+  save();
+}
+
+function setRollPlaying(on) {
+  engine.setRollPlaying(on);
+  settings.roll.playing = on;
+  $('rollPlay').setAttribute('aria-pressed', String(on));
+  $('rollPlay').textContent = on ? '■ Stop' : '▶ Play';
+}
+
+function renderRollSegs() {
+  for (const b of $('rollBars').children) b.classList.toggle('is-on', Number(b.dataset.bars) === engine.pattern.bars);
+  for (const b of $('rollSnap').children) b.classList.toggle('is-on', Number(b.dataset.snap) === settings.roll.snap);
+}
+
+function applyRollSettings() {
+  $('rollSound').value = settings.roll.sound;
+  engine.setRollSound(settings.roll.sound);
+  engine.setRollToLoop(settings.roll.toLoop);
+  $('rollToLoop').setAttribute('aria-pressed', String(settings.roll.toLoop));
+  engine.chain('roll').setAll(settings.roll.fx);
+  renderRollSegs();
+  saveRoll();
+}
+
+function wireRoll() {
+  $('rollBtn').addEventListener('click', () => toggleRoll());
+  $('rollClose').addEventListener('click', () => toggleRoll(false));
+  $('rollPlay').addEventListener('click', () => setRollPlaying(!engine.rollPlaying));
+  const select = $('rollSound');
+  for (const g of GROUPS) {
+    const group = document.createElement('optgroup');
+    group.label = g.label;
+    for (const [id, p] of Object.entries(SOUNDS)) {
+      if (p.group !== g.id) continue;
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = p.label;
+      group.appendChild(o);
+    }
+    select.appendChild(group);
+  }
+  select.addEventListener('change', () => {
+    settings.roll.sound = select.value;
+    engine.setRollSound(select.value);
+    save();
+    select.blur(); // give the keys back to the instrument
+  });
+  for (const bars of PATTERN_BARS) {
+    const b = document.createElement('button');
+    b.dataset.bars = String(bars);
+    b.textContent = `${bars} bar${bars > 1 ? 's' : ''}`;
+    b.addEventListener('click', () => {
+      engine.pattern.checkpoint();
+      engine.pattern.setBars(bars);
+      engine.pattern.settle();
+      renderRollSegs();
+      saveRoll();
+    });
+    $('rollBars').appendChild(b);
+  }
+  for (const snap of SNAPS) {
+    const b = document.createElement('button');
+    b.dataset.snap = String(snap.steps);
+    b.textContent = snap.label;
+    b.title = `Snap to ${snap.label} notes`;
+    b.addEventListener('click', () => {
+      settings.roll.snap = snap.steps;
+      renderRollSegs();
+      save();
+    });
+    $('rollSnap').appendChild(b);
+  }
+  $('rollToLoop').addEventListener('click', () => {
+    settings.roll.toLoop = !settings.roll.toLoop;
+    engine.setRollToLoop(settings.roll.toLoop);
+    $('rollToLoop').setAttribute('aria-pressed', String(settings.roll.toLoop));
+    save();
+  });
+  $('rollQuantize').addEventListener('click', () => {
+    engine.pattern.checkpoint();
+    engine.pattern.quantize(settings.roll.snap);
+    engine.pattern.settle();
+    saveRoll();
+  });
+  $('rollUndo').addEventListener('click', () => rollHistory('undo'));
+  $('rollRedo').addEventListener('click', () => rollHistory('redo'));
+  const clear = $('rollClear');
+  clear.addEventListener('click', () => {
+    if (!clear.classList.contains('roll-clear-armed')) {
+      clear.classList.add('roll-clear-armed');
+      clear.textContent = 'Sure?';
+      setTimeout(() => { clear.classList.remove('roll-clear-armed'); clear.textContent = 'Clear'; }, 3000);
+      return;
+    }
+    clear.classList.remove('roll-clear-armed');
+    clear.textContent = 'Clear';
+    engine.pattern.checkpoint();
+    engine.pattern.clear();
+    engine.pattern.settle();
+    saveRoll();
+  });
+}
+
+function rollHistory(which) {
+  if (engine.pattern[which]()) {
+    renderRollSegs();
+    saveRoll();
+  }
 }
 
 /* ---------------------------------- pads ---------------------------------- */
@@ -886,7 +1049,8 @@ function sessionNow() {
     octave: keys.octave,
     liveFx: { ...settings.fx },
     voicePitch: settings.voicePitch,
-    voiceTune: settings.voiceTune
+    voiceTune: settings.voiceTune,
+    roll: { ...settings.roll, pattern: engine.pattern.toJSON(), playing: engine.rollPlaying }
   };
 }
 
@@ -939,6 +1103,12 @@ async function openProject(bytes) {
   if (Number.isFinite(ss.voicePitch)) settings.voicePitch = ss.voicePitch;
   if (Number.isFinite(ss.voiceTune)) settings.voiceTune = ss.voiceTune;
   setVoiceFx();
+  if (ss.roll) {
+    settings.roll = { ...settings.roll, ...ss.roll, fx: { ...FX_DEFAULTS, ...ss.roll.fx } };
+    if (!(settings.roll.sound in SOUNDS)) settings.roll.sound = 'pluck';
+    engine.pattern.load(ss.roll.pattern);
+    applyRollSettings();
+  }
 
   // Beat and tempo first, so the loop lands on the beat's grid.
   const beat = meta.beat in BEATS ? meta.beat : null;
@@ -949,6 +1119,7 @@ async function openProject(bytes) {
 
   fitted.forEach((_, k) => engine.chain(k).setAll({ ...FX_DEFAULTS, ...layerFx[k] }));
   await engine.importLoop(fitted, length);
+  if (ss.roll) setRollPlaying(!!ss.roll.playing);
   selectFxTarget('live');
   refreshVoiceKnobs();
   save();
@@ -1087,6 +1258,7 @@ for (const [name, v] of Object.entries(settings.fx)) engine.setFx('live', name, 
 selectFxTarget('live');
 engine.setVolume(settings.volume);
 engine.setVoiceFx(pitchSemis(settings.voicePitch), settings.voiceTune);
+applyRollSettings();
 midi.connect();
 boot();
 requestAnimationFrame(frame);

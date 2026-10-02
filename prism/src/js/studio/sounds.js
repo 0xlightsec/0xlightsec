@@ -128,6 +128,8 @@ export class StudioSynth {
     this.bpm = 96;
     this.voices = new Map(); // trigger id -> [voice]
     this.lastFreq = 0;       // for gliding mono sounds
+    this.booked = [];        // notes booked ahead by the piano roll
+    this.lastBooked = null;
   }
 
   get preset() {
@@ -168,6 +170,53 @@ export class StudioSynth {
 
   allOff() {
     for (const id of [...this.voices.keys()]) this.noteOff(id);
+  }
+
+  /**
+   * Book one note on the audio clock, for the piano roll: it starts at `at` and
+   * is released `duration` seconds later. Mono sounds cut (and glide from) the
+   * previous booked note if it's still sounding then.
+   */
+  schedule(midi, velocity, at, duration) {
+    const p = this.preset;
+    const m = midi + (p.shift ?? 0);
+    let glideFrom = 0;
+    const last = this.lastBooked;
+    if (p.mono && last && last.end > at + 0.001 && last.start < at) {
+      glideFrom = last.freq;
+      this.release(last.voice, at, 0.012);
+      last.end = at;
+    }
+    const v = this.voice(m, velocity, at, glideFrom);
+    this.release(v, at + duration, v.release);
+    const entry = { midi: m, start: at, end: at + duration, voice: v, freq: pianoFrequency(m) };
+    this.booked.push(entry);
+    this.lastBooked = entry;
+    return entry;
+  }
+
+  /** Release a voice at a set time (cancelling any later release already booked). */
+  release(v, at, tail) {
+    v.amp.gain.cancelScheduledValues(at);
+    v.amp.gain.setTargetAtTime(0.0001, at, tail / 4);
+    for (const o of v.oscs) o.stop(at + tail + 0.05);
+  }
+
+  /** Booked notes sounding at time t, lowest first; forgets the finished ones. */
+  sounding(t) {
+    this.booked = this.booked.filter((b) => b.end + 2 > t);
+    return this.booked.filter((b) => b.start <= t && t < b.end).map((b) => b.midi).sort((a, b) => a - b);
+  }
+
+  /** Silence everything booked: what's playing fades fast, what hasn't started never does. */
+  cancelBooked() {
+    const now = this.ctx.currentTime;
+    for (const b of this.booked) {
+      if (b.start > now) for (const o of b.voice.oscs) o.stop(now);
+      else if (b.end > now) this.release(b.voice, now, 0.03);
+    }
+    this.booked = [];
+    this.lastBooked = null;
   }
 
   /** Notes sounding now, lowest first. */

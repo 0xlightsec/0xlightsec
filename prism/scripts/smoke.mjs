@@ -3,7 +3,7 @@
  *
  * Launches the real binary, drives it over the Chrome DevTools Protocol (Node's
  * built-in WebSocket, no extra dependencies) through the Studio (circles, beat,
- * looper, undo and redo, saving and loading a loop), the visualizer and the oscilloscope with a built-in music track, saves
+ * looper, undo and redo, saving and loading a loop, the piano roll), the visualizer and the oscilloscope with a built-in music track, saves
  * screenshots, and checks each Electron fuse against the attack it exists to stop.
  * Exits non-zero on any failure.
  */
@@ -134,6 +134,17 @@ async function drive() {
     check(reloaded === '1 bar', 'the saved loop loads back, on the beat', String(reloaded));
     await key('Delete', 'Delete', 46);
     await evaluate(`document.getElementById('libraryClose').click(), true`);
+    // Piano roll: open it, draw a note with the mouse, close it.
+    await key('KeyN', 'n', 78);
+    check((await waitFor(`!document.getElementById('roll').hidden && 'open'`, 5000)) === 'open', 'N opens the piano roll');
+    const at = await evaluate(`(() => { const r = document.getElementById('rollCanvas').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await sleep(300);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', buttons: 1, clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', buttons: 0, clickCount: 1 });
+    const rollNotes = await waitFor(`(() => { const n = JSON.parse(localStorage.getItem('prism.studio.v1') || '{}').roll?.pattern?.notes?.length; return n > 0 && n; })()`, 5000);
+    check(rollNotes >= 1, 'a click draws a note in the roll', `${rollNotes} note(s)`);
+    await key('KeyN', 'n', 78);
     await evaluate(`document.querySelector('[data-beat=""]').click(), true`);
     const studioShot = await send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(SHOT.replace(/\.png$/, '-studio.png'), Buffer.from(studioShot.result.data, 'base64'));
