@@ -85,11 +85,12 @@
         </button>
         <div class="loop-side">
           <div class="loop-state" id="loopState">Press to record</div>
-          <div class="layers" id="loopLayers" aria-label="Layers"></div>
+          <div class="layers" id="loopLayers" aria-label="Layers: click one to change its effects"></div>
           <div class="panel-row">
-            <button class="pill" id="undoBtn" disabled>Undo <kbd>⌫</kbd></button>
+            <button class="pill" id="undoBtn" disabled title="Take back the last layer (Backspace)">Undo <kbd>⌫</kbd></button>
+            <button class="pill" id="redoBtn" disabled title="Put it back (Shift+Backspace)">Redo</button>
             <button class="pill" id="stopBtn" disabled>Stop</button>
-            <button class="pill" id="clearBtn" disabled>Clear <kbd>del</kbd></button>
+            <button class="pill" id="clearBtn" disabled title="Clear the loop (Delete)">Clear</button>
           </div>
         </div>
       </div>
@@ -107,19 +108,25 @@
     </article>
 
     <article class="panel panel-sound">
-      <header class="panel-head"><span class="panel-title">Sound</span><span class="panel-sub"><kbd>1</kbd>–<kbd>5</kbd></span></header>
-      <div class="seg seg-big" id="soundSeg"></div>
-      <div class="panel-row">
-        <button class="toggle" id="chordBtn" aria-pressed="false" title="Each key plays a whole chord that fits the key">Chords <kbd>C</kbd></button>
-        <div class="mini-ctl"><span class="ctl-label">Key</span><div class="stepper small"><button id="keyDown" aria-label="Key down">−</button><span id="keyValue">C</span><button id="keyUp" aria-label="Key up">+</button></div></div>
-        <div class="mini-ctl"><span class="ctl-label">Octave <kbd>Z</kbd><kbd>X</kbd></span><div class="stepper small"><button id="octDown" aria-label="Octave down">−</button><span id="octValue">C4</span><button id="octUp" aria-label="Octave up">+</button></div></div>
+      <header class="panel-head"><span class="panel-title">Sound</span><span class="panel-sub"><kbd>1</kbd>–<kbd>5</kbd> pick a group, again for the next</span></header>
+      <div class="seg seg-big" id="groupSeg"></div>
+      <div class="sound-body">
+        <div class="sound-list" id="soundList"></div>
+        <div class="shape-knobs" id="shapeKnobs">
+          <div data-shape="tone"></div><div data-shape="attack"></div><div data-shape="release"></div>
+        </div>
       </div>
     </article>
 
-    <article class="panel panel-fx">
-      <header class="panel-head"><span class="panel-title">Effects</span><span class="panel-sub">drag · scroll · double-click resets</span></header>
+    <article class="panel panel-fx" id="fxPanel">
+      <header class="panel-head">
+        <span class="panel-title">Effects</span>
+        <div class="seg fx-target" id="fxTarget" aria-label="Effects for"></div>
+        <span class="panel-sub fx-who" id="fxWho">what you play</span>
+        <button class="toggle mute-btn" id="muteBtn" aria-pressed="false" hidden>Mute</button>
+      </header>
       <div class="knobs" id="fxKnobs">
-        <div data-fx="drive"></div><div data-fx="crush"></div><div data-fx="filter"></div><div data-fx="echo"></div><div data-fx="space"></div>
+        <div data-fx="drive"></div><div data-fx="crush"></div><div data-fx="filter"></div><div data-fx="echo"></div><div data-fx="space"></div><div data-fx="level"></div>
         <div class="knob-gap"></div>
         <div id="volumeKnob"></div>
       </div>
@@ -127,6 +134,11 @@
   </section>
 
   <section class="key-row" id="keyRow">
+    <div class="key-ctl">
+      <button class="toggle" id="chordBtn" aria-pressed="false" title="Each key plays a whole chord that fits the key">Chords <kbd>C</kbd></button>
+      <div class="key-ctl-row"><span class="ctl-label">Key</span><div class="stepper small"><button id="keyDown" aria-label="Key down">−</button><span id="keyValue">C</span><button id="keyUp" aria-label="Key up">+</button></div></div>
+      <div class="key-ctl-row"><span class="ctl-label">Oct <kbd>Z</kbd><kbd>X</kbd></span><div class="stepper small"><button id="octDown" aria-label="Octave down">−</button><span id="octValue">C4</span><button id="octUp" aria-label="Octave up">+</button></div></div>
+    </div>
     <div class="keybed" id="keybed"></div>
     <button class="breakaway" id="breakawayKey" data-state="captured">
       <span class="breakaway-title" id="breakawayTitle">Breakaway</span>

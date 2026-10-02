@@ -2,8 +2,8 @@
  * Smoke-test a packaged PRISM: node scripts/smoke.mjs <path to PRISM.exe or prism>
  *
  * Launches the real binary, drives it over the Chrome DevTools Protocol (Node's
- * built-in WebSocket, no extra dependencies) through the Studio (circles, beat and
- * looper), the visualizer and the oscilloscope with a built-in music track, saves
+ * built-in WebSocket, no extra dependencies) through the Studio (circles, beat,
+ * looper, undo and redo), the visualizer and the oscilloscope with a built-in music track, saves
  * screenshots, and checks each Electron fuse against the attack it exists to stop.
  * Exits non-zero on any failure.
  */
@@ -95,9 +95,9 @@ async function drive() {
   const app = launch([`--remote-debugging-port=${PORT}`]);
   try {
     const { send, evaluate, waitFor, errors, close } = await cdp();
-    const key = async (code, keyText, vk) => {
-      await send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: keyText, windowsVirtualKeyCode: vk });
-      await send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: keyText, windowsVirtualKeyCode: vk });
+    const key = async (code, keyText, vk, modifiers = 0) => {
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: keyText, windowsVirtualKeyCode: vk, modifiers });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: keyText, windowsVirtualKeyCode: vk, modifiers });
     };
     const loopState = () => evaluate("document.getElementById('loopBtn').dataset.state");
 
@@ -120,6 +120,10 @@ async function drive() {
     await sleep(1500);
     await key('Space', ' ', 32);
     check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'playing' && document.getElementById('loopLen').textContent`, 5000)) === '1 bar', 'the loop closes, snapped to a bar of the beat', await evaluate("document.getElementById('loopLen').textContent"));
+    await key('Backspace', 'Backspace', 8);
+    check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'empty' && !document.getElementById('redoBtn').disabled && 'undone'`, 5000)) === 'undone', 'Backspace undoes the layer, and Redo is offered', await loopState());
+    await key('Backspace', 'Backspace', 8, 8); // Shift
+    check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'playing' && 'playing'`, 5000)) === 'playing', 'Shift+Backspace redoes it', await loopState());
     await key('Delete', 'Delete', 46);
     check((await waitFor(`document.getElementById('loopBtn').dataset.state === 'empty' && 'empty'`, 5000)) === 'empty', 'Delete clears the loop', await loopState());
     await evaluate(`document.querySelector('[data-beat=""]').click(), true`);

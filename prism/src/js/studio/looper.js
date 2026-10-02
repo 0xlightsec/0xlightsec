@@ -16,12 +16,16 @@
  *   pre-roll is always being kept, so pressing a little late loses nothing.
  * - The loop keeps filling after the closing press until its last musical moment
  *   has arrived, so the end of a take (or a late press) isn't cut off.
- * - Each overdub is its own layer, so Undo removes just the last one.
+ * - Each overdub is its own layer, so Undo removes just the last one, and Redo
+ *   puts it back (until something new is recorded). Every layer plays out of its
+ *   own output, so each one can have its own effects.
  *
  * Pure code (no Web Audio), so the tests drive it directly.
  */
 
 const SNAP_BARS = [1, 2, 4, 8];
+/** Layers kept at once: one output each. */
+export const MAX_LAYERS = 8;
 const PRE_ROLL_SECONDS = 2.5;
 
 const mod = (a, n) => ((a % n) + n) % n;
@@ -44,6 +48,7 @@ export class LoopCore {
   clear() {
     this.state = 'empty';
     this.layers = [];
+    this.redoStack = [];
     this.overdubLayer = null;
     this.length = 0;
     this.start = 0;     // musical frame where the loop's first pass began
@@ -80,6 +85,7 @@ export class LoopCore {
         this.close();
         break;
       case 'playing':
+        if (this.layers.length >= MAX_LAYERS) break; // full: undo or clear first
         this.state = 'overdub';
         this.overdubLayer = new Float32Array(this.length);
         break;
@@ -94,6 +100,8 @@ export class LoopCore {
   }
 
   begin() {
+    this.layers = [];
+    this.redoStack = [];
     this.state = 'recording';
     this.pressedAt = this.frame;
     // Seed the take with the pre-roll, oldest sample first.
@@ -114,6 +122,7 @@ export class LoopCore {
       if (k >= 0 && k < this.recLen) layer[j] = this.rec[k];
     }
     this.layers = [layer];
+    this.redoStack = [];
     this.length = len;
     this.start = start;
     this.fillEnd = start + len;
@@ -121,20 +130,37 @@ export class LoopCore {
   }
 
   commitOverdub() {
-    if (this.overdubLayer) this.layers.push(this.overdubLayer);
+    if (this.overdubLayer) {
+      this.layers.push(this.overdubLayer);
+      this.redoStack = []; // a new layer replaces whatever could be redone
+    }
     this.overdubLayer = null;
   }
 
-  /** Remove the newest layer (or abandon the overdub in progress). */
+  /**
+   * Take back the newest layer (or abandon the overdub in progress). Undoing the
+   * last one leaves the loop empty but remembered, so Redo can bring it back.
+   */
   undo() {
     if (this.state === 'overdub') {
       this.overdubLayer = null;
       this.state = 'playing';
-    } else if (this.state === 'recording' || this.layers.length <= 1) {
+    } else if (this.state === 'recording') {
       this.clear();
-    } else {
-      this.layers.pop();
+    } else if (this.layers.length) {
+      this.redoStack.push(this.layers.pop());
+      if (!this.layers.length) {
+        this.fillEnd = 0;
+        this.state = 'empty';
+      }
     }
+  }
+
+  /** Put back the layer Undo took, in the same place. */
+  redo() {
+    if (!this.redoStack.length || this.state === 'recording' || this.state === 'overdub') return;
+    this.layers.push(this.redoStack.pop());
+    if (this.state === 'empty') this.restart();
   }
 
   /** Stop playback (keeping the loop) or start it again from the top. */
@@ -156,10 +182,16 @@ export class LoopCore {
     this.state = 'playing';
   }
 
-  /** `frame`: the graph frame of input[0], when the host knows it. */
-  process(input, output, n, frame = this.frame) {
+  /**
+   * `outputs`: one array per layer slot (layer k plays out of slot k, an overdub
+   * in progress out of the next one), or a single array for the whole mix.
+   * `frame`: the graph frame of input[0], when the host knows it.
+   */
+  process(input, outputs, n, frame = this.frame) {
     const layers = this.layers;
     const len = this.length;
+    const split = Array.isArray(outputs);
+    if (split) for (const o of outputs) o.fill(0, 0, n);
     for (let i = 0; i < n; i++) {
       const f = frame + i;
       const x = input ? input[i] : 0;
@@ -177,14 +209,18 @@ export class LoopCore {
         if (m < this.fillEnd && m >= this.start) layers[0][m - this.start] = x;
         if (f >= this.start) {
           const p = mod(f - this.start, len);
-          for (let l = 0; l < layers.length; l++) out += layers[l][p];
+          for (let l = 0; l < layers.length; l++) {
+            if (split) outputs[l][i] = layers[l][p];
+            else out += layers[l][p];
+          }
           if (this.overdubLayer && m >= this.fillEnd) {
             this.overdubLayer[mod(m - this.start, len)] += x;
-            out += this.overdubLayer[p];
+            if (split) outputs[layers.length][i] = this.overdubLayer[p];
+            else out += this.overdubLayer[p];
           }
         }
       }
-      output[i] = out;
+      if (!split) outputs[i] = out;
     }
     this.frame = frame + n;
   }
@@ -195,6 +231,8 @@ export class LoopCore {
     return {
       state: this.state,
       layers: this.layers.length + (this.overdubLayer ? 1 : 0),
+      redo: this.redoStack.length,
+      full: this.layers.length >= MAX_LAYERS,
       progress: playing ? mod(f - this.start, this.length) / this.length : 0,
       seconds: this.state === 'recording'
         ? Math.max(0, f - this.nearestDownbeat(this.pressedAt)) / this.sr

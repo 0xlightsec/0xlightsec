@@ -1,10 +1,6 @@
 /**
  * Studio effects: five knobs, each silent at zero (or, for Filter, at centre),
- * so an untouched knob never colours the sound.
- *
- *   in ─▶ Drive ─▶ Crush ─▶ Filter ─┬───────────────▶ out
- *                                   ├─▶ Echo  ──────▶ out   (tempo-synced, feeds back)
- *                                   └─▶ Space ──────▶ out   (reverb)
+ * so an untouched knob never colours the sound, plus a level and a mute.
  *
  * The curve and mapping functions are pure, so the tests check them directly.
  */
@@ -66,14 +62,38 @@ export function echoSetting(knob) {
   return { send: x < 0.001 ? 0 : 0.25 + 0.55 * x, feedback: 0.2 + 0.45 * x };
 }
 
+/** Knob positions an untouched chain starts from. */
+export const FX_DEFAULTS = { drive: 0, crush: 0, filter: 0.5, echo: 0, space: 0.25, level: 0.8, mute: false };
+
+/** Level knob to gain: the default position (0.8) is unity, the top is +2 dB. */
+export const levelGain = (v) => clamp(v, 0, 1) * 1.25;
+
+/**
+ * One reverb for everything. Convolution is the expensive effect, so every
+ * chain sends into this one hall instead of running its own.
+ */
+export class SpaceBus {
+  constructor(ctx, out) {
+    this.input = ctx.createGain();
+    this.reverb = ctx.createConvolver();
+    this.reverb.buffer = impulse(ctx, 3.2, 2.8);
+    this.input.connect(this.reverb).connect(out);
+  }
+}
+
+/**
+ * One set of effects: the live sound has one, and so does every loop layer, so
+ * a layer keeps the effects it was made with however the knobs move later.
+ *
+ *   in ─▶ Drive ─▶ Crush ─▶ Filter ─▶ Level ─┬─────────▶ out
+ *                                            ├─▶ Echo ─▶ out
+ *                                            └─▶ Space bus (shared reverb)
+ */
 export class FxChain {
-  constructor(ctx) {
+  constructor(ctx, space, out) {
     this.ctx = ctx;
     this.input = ctx.createGain();
-    this.output = ctx.createGain();
-
     this.drive = ctx.createWaveShaper();
-    this.drive.oversample = '4x';
     this.crush = ctx.createWaveShaper();
     this.lp = ctx.createBiquadFilter();
     this.lp.type = 'lowpass';
@@ -81,9 +101,9 @@ export class FxChain {
     this.hp = ctx.createBiquadFilter();
     this.hp.type = 'highpass';
     this.hp.Q.value = 2.5;
-
-    this.input.connect(this.drive).connect(this.crush).connect(this.lp).connect(this.hp);
-    this.hp.connect(this.output);
+    this.level = ctx.createGain();
+    this.input.connect(this.drive).connect(this.crush).connect(this.lp).connect(this.hp).connect(this.level);
+    this.level.connect(out);
 
     // Echo: delay with a darkening feedback loop, so repeats fade like tape.
     this.echoSend = ctx.createGain();
@@ -93,21 +113,16 @@ export class FxChain {
     this.echoTone = ctx.createBiquadFilter();
     this.echoTone.type = 'lowpass';
     this.echoTone.frequency.value = 3800;
-    this.hp.connect(this.echoSend).connect(this.delay).connect(this.echoTone).connect(this.feedback).connect(this.delay);
-    this.echoTone.connect(this.output);
+    this.level.connect(this.echoSend).connect(this.delay).connect(this.echoTone).connect(this.feedback).connect(this.delay);
+    this.echoTone.connect(out);
 
-    // Space: a generated hall.
     this.spaceSend = ctx.createGain();
     this.spaceSend.gain.value = 0;
-    this.reverb = ctx.createConvolver();
-    this.reverb.buffer = impulse(ctx, 3.2, 2.8);
-    this.hp.connect(this.spaceSend).connect(this.reverb).connect(this.output);
+    this.level.connect(this.spaceSend).connect(space.input);
 
-    this.values = { drive: 0, crush: 0, filter: 0.5, echo: 0, space: 0 };
-    this.bpm = 100;
-    this.setTempo(this.bpm);
-    this.setFilter(0.5);
-    this.setEcho(0);
+    this.values = { ...FX_DEFAULTS };
+    this.setAll(FX_DEFAULTS);
+    this.setTempo(100);
   }
 
   set(name, value) {
@@ -116,11 +131,19 @@ export class FxChain {
     else if (name === 'filter') this.setFilter(value);
     else if (name === 'echo') this.setEcho(value);
     else if (name === 'space') this.setSpace(value);
+    else if (name === 'level') this.setLevel(value);
+    else if (name === 'mute') this.setMute(value);
+  }
+
+  /** Take on a whole set of knob positions (missing ones keep their defaults). */
+  setAll(values) {
+    for (const [name, v] of Object.entries({ ...FX_DEFAULTS, ...values })) this.set(name, v);
   }
 
   setDrive(v) {
     this.values.drive = v;
     this.drive.curve = driveCurve(v);
+    this.drive.oversample = this.drive.curve ? '4x' : 'none';
   }
 
   setCrush(v) {
@@ -149,8 +172,22 @@ export class FxChain {
     this.spaceSend.gain.setTargetAtTime(clamp(v, 0, 1) * 0.9, this.ctx.currentTime, 0.05);
   }
 
+  setLevel(v) {
+    this.values.level = v;
+    this.applyLevel();
+  }
+
+  setMute(on) {
+    this.values.mute = !!on;
+    this.applyLevel();
+  }
+
+  applyLevel() {
+    const g = this.values.mute ? 0 : levelGain(this.values.level);
+    this.level.gain.setTargetAtTime(g, this.ctx.currentTime, 0.015);
+  }
+
   setTempo(bpm) {
-    this.bpm = bpm;
     this.delay.delayTime.setTargetAtTime(echoSeconds(bpm), this.ctx.currentTime, 0.05);
   }
 }

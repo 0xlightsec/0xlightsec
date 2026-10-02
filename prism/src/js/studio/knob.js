@@ -25,15 +25,16 @@ function arc(from, to) {
 export class Knob {
   /**
    * @param {HTMLElement} el      container; gets the knob, label and value
-   * @param {object} opts         { label, value, def, bipolar, format, onChange, hue }
+   * @param {object} opts         { label, value, def, bipolar, small, format, onChange, hue }
    */
-  constructor(el, { label, value = 0, def = value, bipolar = false, format = (v) => `${Math.round(v * 100)}`, onChange, hue = 314 }) {
+  constructor(el, { label, value = 0, def = value, bipolar = false, small = false, format = (v) => `${Math.round(v * 100)}`, onChange, hue = 314 }) {
     this.el = el;
     this.def = def;
     this.bipolar = bipolar;
     this.format = format;
     this.onChange = onChange;
     el.classList.add('knob');
+    el.classList.toggle('is-small', small);
     el.style.setProperty('--knob-hue', String(hue));
     el.innerHTML = `
       <div class="knob-dial" tabindex="0" role="slider" aria-label="${label}" aria-valuemin="0" aria-valuemax="100">

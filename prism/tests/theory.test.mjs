@@ -347,7 +347,7 @@ check('rendered circles stay on screen, never click, and sit at their two centre
   assert.ok(low > 0.35 && low < 0.65, `time split between circles ${low.toFixed(2)}`);
 });
 
-const { LoopCore } = await import('../src/js/studio/looper.js');
+const { LoopCore, MAX_LAYERS } = await import('../src/js/studio/looper.js');
 console.log('\nlooper');
 const run = (core, seconds, signal = () => 0) => {
   const n = Math.round(core.sr * seconds), out = new Float32Array(n), inp = new Float32Array(n);
@@ -430,6 +430,48 @@ check('clear empties; stop holds the loop and restarts from the top', () => {
   c.clear(); assert.equal(c.state, 'empty'); assert.equal(c.layers.length, 0);
 });
 
+/** Record a loop of a click at 0, then one overdub layer per value, each a click at 100·k. */
+const layered = (values) => {
+  const c = new LoopCore(8000);
+  c.press(); run(c, 1.0, (i) => (i === 0 ? 1 : 0)); c.press();
+  values.forEach((v, k) => { c.press(); run(c, 1.0, (i) => (i === 100 * (k + 1) ? v : 0)); c.press(); });
+  return c;
+};
+check('redo puts back exactly what undo took; a new layer ends redo', () => {
+  const c = layered([0.5, 0.25]);
+  const before = run(c, 1.0);
+  c.undo(); assert.equal(c.status().redo, 1);
+  assert.equal(run(c, 1.0)[200], 0);
+  c.redo(); assert.equal(c.status().redo, 0);
+  assert.deepEqual(run(c, 1.0), before);
+  c.undo(); c.press(); run(c, 1.0); c.press();   // record something new instead
+  assert.equal(c.status().redo, 0); c.redo(); assert.equal(c.status().layers, 3);
+});
+check('undoing every layer keeps the loop, so redo can bring it all back', () => {
+  const c = layered([0.5]);
+  c.undo(); c.undo();
+  assert.equal(c.state, 'empty'); assert.equal(c.status().redo, 2);
+  assert.ok(run(c, 1.0).every((v) => v === 0));
+  c.redo(); c.redo();
+  assert.equal(c.state, 'playing');
+  const out = run(c, 1.0);
+  assert.equal(out[0], 1); assert.equal(out[100], 0.5);
+});
+check('each layer plays out of its own output, so it can have its own effects', () => {
+  const c = layered([0.5, 0.25]);
+  const slots = Array.from({ length: MAX_LAYERS }, () => new Float32Array(8000));
+  c.process(null, slots, 8000);
+  assert.equal(slots[0][0], 1); assert.equal(slots[1][100], 0.5); assert.equal(slots[2][200], 0.25);
+  assert.equal(slots[0][100] + slots[1][0] + slots[2][100], 0);
+  assert.ok(slots.slice(3).every((s) => s.every((v) => v === 0)));
+});
+check(`the loop holds ${MAX_LAYERS} layers; past that, overdub waits for an undo`, () => {
+  const c = layered(Array(MAX_LAYERS - 1).fill(0.1));
+  assert.equal(c.status().layers, MAX_LAYERS); assert.equal(c.status().full, true);
+  c.press(); assert.equal(c.state, 'playing');
+  c.undo(); c.press(); assert.equal(c.state, 'overdub');
+});
+
 const fx = await import('../src/js/studio/fx.js');
 const drums = await import('../src/js/studio/drums.js');
 const sounds = await import('../src/js/studio/sounds.js');
@@ -489,5 +531,30 @@ check('chord mode: each note of the key gets its own chord from the key', () => 
   const inG = [67, 69, 71, 72, 74, 76, 78].map((m) => sounds.chordName(sounds.chordFor(m, 7)));
   assert.deepEqual(inG, ['G', 'Am', 'Bm', 'C', 'D', 'Em', 'F♯°']);
   assert.deepEqual(sounds.chordFor(61, 0), [61, 65, 68]); // between the scale notes: major
+});
+check('every sound is a complete recipe in a known group', () => {
+  const groups = new Set(sounds.GROUPS.map((g) => g.id));
+  const ids = Object.keys(sounds.SOUNDS);
+  assert.ok(ids.length >= 20, `${ids.length} sounds`);
+  for (const [id, p] of Object.entries(sounds.SOUNDS)) {
+    assert.ok(groups.has(p.group), `${id}: group ${p.group}`);
+    assert.equal(p.env.length, 4, `${id}: env`);
+    assert.ok(p.env.every((v) => Number.isFinite(v) && v >= 0), `${id}: env values`);
+    assert.ok(p.level > 0 && p.cutoff > 0, `${id}: level/cutoff`);
+    for (const o of sounds.oscillatorsOf(p)) assert.ok(['sine', 'triangle', 'sawtooth', 'square'].includes(o.type) && o.gain > 0, `${id}: osc`);
+  }
+  for (const g of groups) assert.ok(ids.filter((id) => sounds.SOUNDS[id].group === g).length >= 4, `group ${g}`);
+});
+check('a supersaw spreads its saws evenly around the note', () => {
+  const saws = sounds.oscillatorsOf({ osc: [{ saws: 5, spread: 20 }] });
+  assert.deepEqual(saws.map((o) => o.detune), [-20, -10, 0, 10, 20]);
+});
+check('shape knobs: centre plays the sound as designed, the ends scale it 8x either way', () => {
+  assert.equal(sounds.shapeFactor(0.5), 1);
+  assert.ok(Math.abs(sounds.shapeFactor(1) - 8) < 1e-9 && Math.abs(sounds.shapeFactor(0) - 1 / 8) < 1e-9);
+});
+check('a layer level at its default is unity gain', () => {
+  assert.equal(fx.levelGain(fx.FX_DEFAULTS.level), 1);
+  assert.equal(fx.levelGain(0), 0);
 });
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

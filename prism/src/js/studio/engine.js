@@ -1,24 +1,27 @@
 /**
  * Audio for the Studio.
  *
- *   keys ─▶ synth ──┬─────────────────────────────▶ FX ─▶ mix ─▶ limiter ─▶ master ─▶ speakers
- *                   └─ (input-latency delay) ─┐    ▲        ▲
- *   mic ─▶ trim ─┬─ voice-to-loop ────────────┴─▶ looper ─┘ │
- *                └─ headphones only ───────────────▶ FX      │
- *   beat ──────────────────────────────────────────────────┘ (clean: the timing reference)
+ *   keys ─▶ synth ──┬──────────────────────────▶ live FX ──────┐
+ *                   └─ (input-latency delay) ─┐                 ├─▶ mix ─▶ limiter ─▶ master ─▶ speakers
+ *   mic ─▶ trim ─┬─ voice-to-loop ────────────┴─▶ looper ─┬─▶ layer 1 FX ─┤
+ *                │                                        ├─▶ layer 2 FX ─┤   (one chain per layer,
+ *                └─ headphones only ─▶ live FX            └─▶ …          ─┤    all sharing one reverb)
+ *   beat ─────────────────────────────────────────────────────────────────┘ (clean: the timing reference)
  *
  * - The mic is never sent to the speakers unless you say you're on headphones:
  *   with speakers it would feed back. Without headphones the browser's echo
  *   cancellation is on, so the speakers aren't recorded into your loop either.
- * - The looper records dry and plays back through the FX, so turning a knob
- *   changes the whole loop live, DJ style. The beat isn't recorded; loops lock to it.
+ * - The looper records dry and plays every layer through its own effects. A new
+ *   layer starts with the live effects as they were while you recorded it, and
+ *   keeps them: change a layer's effects later and only that layer changes.
  * - Keys are delayed into the looper by the input latency, so a note played in
  *   time with what you hear lands in the same place as a note sung in time.
  * - One capture worklet sees the music, the mic and the circles in the same render
  *   quantum, as on the oscilloscope page.
  */
 
-import { FxChain } from './fx.js';
+import { FxChain, SpaceBus, FX_DEFAULTS } from './fx.js';
+import { MAX_LAYERS } from './looper.js';
 import { Drums, barSeconds, fitTempo, TEMPO_MIN, TEMPO_MAX } from './drums.js';
 import { StudioSynth } from './sounds.js';
 
@@ -35,7 +38,8 @@ export class StudioEngine {
     this.volume = 0.8;
     this.bpm = 96;
     this.beatName = null;
-    this.loop = { state: 'empty', layers: 0, progress: 0, seconds: 0, start: 0, length: 0 };
+    this.loop = { state: 'empty', layers: 0, redo: 0, full: false, progress: 0, seconds: 0, start: 0, length: 0 };
+    this.recordSlot = null; // the layer being recorded, whose effects follow the live ones
     this.onLoop = null;
     this.onStep = null;
     this.recorder = null;
@@ -69,13 +73,15 @@ export class StudioEngine {
     this.mix = ctx.createGain();
     this.mix.connect(this.limiter).connect(this.master).connect(ctx.destination);
 
-    this.fx = new FxChain(ctx);
-    this.fx.output.connect(this.mix);
-    this.fx.setTempo(this.bpm);
+    this.space = new SpaceBus(ctx, this.mix);
+    this.liveFx = new FxChain(ctx, this.space, this.mix);
+    this.layerFx = Array.from({ length: MAX_LAYERS }, () => new FxChain(ctx, this.space, this.mix));
+    for (const chain of this.chains) chain.setTempo(this.bpm);
 
     this.synthBus = ctx.createGain();
-    this.synthBus.connect(this.fx.input);
+    this.synthBus.connect(this.liveFx.input);
     this.synth = new StudioSynth(ctx, this.synthBus);
+    this.synth.bpm = this.bpm;
 
     this.drums = new Drums(ctx, this.mix);
     this.drums.bpm = this.bpm;
@@ -93,7 +99,7 @@ export class StudioEngine {
     this.trim.connect(this.voiceSend).connect(this.loopIn);
     this.monitor = ctx.createGain();
     this.monitor.gain.value = 0;
-    this.trim.connect(this.monitor).connect(this.fx.input);
+    this.trim.connect(this.monitor).connect(this.liveFx.input);
 
     // What the music circle follows: keys, loop and beat, before the FX.
     this.musicTap = ctx.createGain();
@@ -122,14 +128,21 @@ export class StudioEngine {
       module('../scope/live-worklet.js'),
       module('./looper-worklet.js')
     ]).then(() => {
-      this.looper = new AudioWorkletNode(ctx, 'prism-looper', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      this.looper = new AudioWorkletNode(ctx, 'prism-looper', {
+        numberOfInputs: 1,
+        numberOfOutputs: MAX_LAYERS,
+        outputChannelCount: Array(MAX_LAYERS).fill(1)
+      });
       this.looper.port.onmessage = (e) => {
         this.loop = e.data;
+        if (e.data.state !== 'recording' && e.data.state !== 'overdub') this.recordSlot = null;
         this.onLoop?.(e.data);
       };
       this.loopIn.connect(this.looper);
-      this.looper.connect(this.fx.input);
-      this.looper.connect(this.musicTap);
+      this.layerFx.forEach((chain, k) => {
+        this.looper.connect(chain.input, k);
+        this.looper.connect(this.musicTap, k);
+      });
 
       this.live = new AudioWorkletNode(ctx, 'prism-live', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
       this.live.port.postMessage({ active: true });
@@ -225,6 +238,12 @@ export class StudioEngine {
     this.synth.sound = name;
   }
 
+  /** Tone, Attack or Release: 0.5 plays the sound as designed. */
+  setShape(name, value) {
+    this.start();
+    this.synth.shape[name] = value;
+  }
+
   get held() {
     return this.synth?.held ?? [];
   }
@@ -235,6 +254,17 @@ export class StudioEngine {
     this.start();
     // Output latency can settle after start-up; refresh it at every press.
     this.updateLatency();
+    if (cmd === 'press') {
+      // The press that starts a take or a layer: that layer begins with the live
+      // effects, and follows them until it's kept.
+      const { state, layers, full } = this.loop;
+      const slot = state === 'empty' ? 0 : state === 'playing' && !full ? layers : null;
+      if (slot !== null) {
+        const { level, mute, ...sound } = this.liveFx.values;
+        this.layerFx[slot].setAll({ ...sound, level: FX_DEFAULTS.level, mute: false });
+        this.recordSlot = slot;
+      }
+    }
     this.looper?.port.postMessage({ cmd });
   }
 
@@ -284,7 +314,8 @@ export class StudioEngine {
   applyTempo(bpm) {
     this.bpm = Math.round(Math.min(TEMPO_MAX, Math.max(TEMPO_MIN, bpm)) * 10) / 10;
     this.drums?.setTempo(this.bpm);
-    this.fx?.setTempo(this.bpm);
+    for (const chain of this.chains) chain.setTempo(this.bpm);
+    if (this.synth) this.synth.bpm = this.bpm;
   }
 
   /** Tell the looper where the bars are, so a take snaps to them. */
@@ -300,9 +331,28 @@ export class StudioEngine {
 
   /* ---------------------------------- mix ---------------------------------- */
 
-  setFx(name, value) {
+  /** Every effects chain: the live one, then one per layer slot. */
+  get chains() {
+    return this.liveFx ? [this.liveFx, ...this.layerFx] : [];
+  }
+
+  /** The chain for 'live' or a layer number (0 = the first take). */
+  chain(target) {
     this.start();
-    this.fx.set(name, value);
+    return target === 'live' ? this.liveFx : this.layerFx[target];
+  }
+
+  fxValues(target) {
+    return { ...this.chain(target).values };
+  }
+
+  setFx(target, name, value) {
+    this.chain(target).set(name, value);
+    // The layer being recorded sounds the way you're hearing it now. Its level
+    // and mute are its own.
+    if (target === 'live' && this.recordSlot !== null && name !== 'level' && name !== 'mute') {
+      this.layerFx[this.recordSlot].set(name, value);
+    }
   }
 
   setVolume(v) {

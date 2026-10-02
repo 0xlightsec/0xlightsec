@@ -2,18 +2,20 @@
  * Studio: sing to move the circles, and make music with one hand.
  *
  *   Voice   your mic drives the upper circle; on headphones you hear it with the FX
- *   Loop    one button: record, loop, add layers (Space); Undo and Clear
+ *   Loop    one button: record, loop, add layers (Space); Undo, Redo and Clear
  *   Beat    pick a groove; loops snap to its bars
- *   Sound   five sounds, chord mode (one key = one chord that fits), key and octave
- *   Effects Drive, Crush, Filter, Echo, Space — on everything you play and loop
+ *   Sound   twenty sounds in five groups, shaped with Tone, Attack and Release
+ *   Keys    chord mode (one key = one chord that fits), key and octave
+ *   Effects Drive, Crush, Filter, Echo, Space, Level — for what you play live, or
+ *           for any one loop layer, which keeps its own settings
  *
  * The lower circle follows the music: keys, loop and beat.
  */
 
 import { StudioEngine } from './engine.js';
-import { SOUNDS, KEY_NAMES, chordFor, chordName } from './sounds.js';
+import { SOUNDS, GROUPS, SHAPE_DEFAULT, KEY_NAMES, chordFor, chordName, shapeFactor } from './sounds.js';
 import { BEATS, STEPS, TEMPO_MIN, TEMPO_MAX } from './drums.js';
-import { filterSetting, crushBits } from './fx.js';
+import { filterSetting, crushBits, levelGain, FX_DEFAULTS } from './fx.js';
 import { Knob } from './knob.js';
 import { ScopeDisplay, SpectrumView, PHOSPHORS } from '../scope/display.js';
 import { Driver, levelFromDb } from '../scope/live.js';
@@ -30,17 +32,23 @@ const STORE = 'prism.studio.v1';
 const PITCH_WINDOW = 2048;
 const VOICE_GATE = 0.004;
 const VOICE_HOLD_MS = 200;
-const SOUND_ORDER = Object.keys(SOUNDS);
 const FX_KNOBS = {
   drive:  { label: 'Drive',  hue: 340, format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) },
   crush:  { label: 'Crush',  hue: 285, format: (v) => (v < 0.005 ? 'off' : `${crushBits(v)} bit`) },
   filter: { label: 'Filter', hue: 196, def: 0.5, bipolar: true, format: formatFilter },
   echo:   { label: 'Echo',   hue: 160, format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) },
-  space:  { label: 'Space',  hue: 255, format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) }
+  space:  { label: 'Space',  hue: 255, format: (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`) },
+  level:  { label: 'Level',  hue: 40,  def: FX_DEFAULTS.level, format: formatLevel }
+};
+const SHAPE_KNOBS = {
+  tone:    { label: 'Tone',    hue: 48,  format: (v) => (Math.abs(v - 0.5) < 0.01 ? 'as is' : v < 0.5 ? 'darker' : 'brighter') },
+  attack:  { label: 'Attack',  hue: 120, format: (v) => seconds(SOUNDS[settings.sound].env[0] * shapeFactor(v)) },
+  release: { label: 'Release', hue: 200, format: (v) => seconds(SOUNDS[settings.sound].env[3] * shapeFactor(v)) }
 };
 
 const settings = {
   sound: 'keys',
+  shape: { ...SHAPE_DEFAULT },
   chords: false,
   key: 0,
   octave: 4,
@@ -49,10 +57,12 @@ const settings = {
   lastBeat: 'groove',
   voiceToLoop: true,
   volume: 0.8,
-  fx: { drive: 0, crush: 0, filter: 0.5, echo: 0, space: 0.25 },
+  fx: { ...FX_DEFAULTS },
   ...load()
 };
 if (!(settings.sound in SOUNDS)) settings.sound = 'keys';
+settings.fx = { ...FX_DEFAULTS, ...settings.fx, mute: false };
+settings.shape = { ...SHAPE_DEFAULT, ...settings.shape };
 if (!(settings.lastBeat in BEATS)) settings.lastBeat = 'groove';
 
 const engine = new StudioEngine();
@@ -220,6 +230,7 @@ async function startMic() {
 
 const LOOP_TEXT = {
   empty:     ['REC',  'Press to record'],
+  full:      ['FULL', 'Every layer is used · undo or clear to add more'],
   recording: ['LOOP', 'Recording… press to loop it'],
   playing:   ['ADD',  'Looping · press to add a layer'],
   overdub:   ['KEEP', 'Adding a layer… press to keep it'],
@@ -229,28 +240,51 @@ const LOOP_TEXT = {
 function renderLoop(st) {
   const btn = $('loopBtn');
   btn.dataset.state = st.state;
-  const [label, text] = LOOP_TEXT[st.state] ?? LOOP_TEXT.empty;
+  const full = st.state === 'playing' && st.full;
+  const [label, text] = LOOP_TEXT[full ? 'full' : st.state] ?? LOOP_TEXT.empty;
   $('loopLabel').textContent = label;
   $('loopState').textContent = text;
   const has = st.state !== 'empty';
   $('undoBtn').disabled = !has;
-  $('clearBtn').disabled = !has;
+  $('redoBtn').disabled = !st.redo || st.state === 'recording' || st.state === 'overdub';
+  $('clearBtn').disabled = !has && !st.redo;
   $('stopBtn').disabled = !(st.state === 'playing' || st.state === 'overdub' || st.state === 'stopped');
   $('stopBtn').textContent = st.state === 'stopped' ? 'Play' : 'Stop';
-  const dots = $('loopLayers');
-  const n = Math.min(st.layers, 24);
-  if (dots.childElementCount !== n || dots.dataset.dub !== String(st.state === 'overdub')) {
-    dots.innerHTML = '';
-    for (let i = 0; i < n; i++) {
-      const dot = document.createElement('i');
-      if (st.state === 'overdub' && i === n - 1) dot.className = 'is-new';
-      dots.appendChild(dot);
-    }
-    dots.dataset.dub = String(st.state === 'overdub');
-  }
+  renderLayers(st);
   $('loopLen').textContent = loopLength(st);
   renderTempo();
 }
+
+/** Layers you can pick: the kept ones (not a take or overdub still recording). */
+const keptLayers = (st) => (st.state === 'overdub' ? st.layers - 1 : st.state === 'recording' ? 0 : st.layers);
+
+/** One dot per layer: click one to give it its own effects. */
+function renderLayers(st) {
+  const kept = keptLayers(st);
+  if (typeof fxTarget === 'number' && fxTarget >= kept) selectFxTarget('live');
+  const dots = $('loopLayers');
+  const n = Math.min(st.layers, 8);
+  const key = `${n}|${st.state === 'overdub'}|${fxTarget}|${mutedLayers()}`;
+  if (dots.dataset.key === key) return;
+  dots.dataset.key = key;
+  dots.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const dot = document.createElement('button');
+    const recording = i >= kept;
+    dot.className = 'layer-dot';
+    dot.classList.toggle('is-new', recording);
+    dot.classList.toggle('is-selected', fxTarget === i);
+    dot.classList.toggle('is-muted', !recording && engine.fxValues(i).mute);
+    dot.textContent = String(i + 1);
+    dot.title = recording ? 'Recording this layer' : `Layer ${i + 1}: its own effects`;
+    dot.disabled = recording;
+    dot.addEventListener('click', () => selectFxTarget(fxTarget === i ? 'live' : i));
+    dots.appendChild(dot);
+  }
+  renderFxTargets(kept);
+}
+
+const mutedLayers = () => (engine.layerFx ? engine.layerFx.map((c) => (c.values.mute ? 1 : 0)).join('') : '');
 
 function loopLength(st) {
   const sr = engine.sampleRate;
@@ -337,12 +371,49 @@ function renderSteps() {
 
 /* ---------------------------------- sound --------------------------------- */
 
+let shapeKnobs = {};
+
 function setSound(name) {
   if (!(name in SOUNDS)) return;
+  const changed = name !== settings.sound;
   settings.sound = name;
   engine.setSound(name);
-  for (const b of $('soundSeg').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.sound === name);
+  // A new sound starts as it was designed.
+  if (changed) settings.shape = { ...SHAPE_DEFAULT };
+  for (const [k, knob] of Object.entries(shapeKnobs)) {
+    knob.set(settings.shape[k], false);
+    engine.setShape(k, settings.shape[k]);
+  }
+  renderSoundPicker();
   save();
+}
+
+/** Group tabs, and the sounds of the current group. */
+function renderSoundPicker() {
+  const group = SOUNDS[settings.sound].group;
+  for (const b of $('groupSeg').querySelectorAll('button')) b.classList.toggle('is-on', b.dataset.group === group);
+  const list = $('soundList');
+  if (list.dataset.group !== group) {
+    list.dataset.group = group;
+    list.innerHTML = '';
+    for (const [id, p] of Object.entries(SOUNDS)) {
+      if (p.group !== group) continue;
+      const b = document.createElement('button');
+      b.className = 'sound-chip';
+      b.dataset.sound = id;
+      b.textContent = p.label;
+      b.addEventListener('click', () => setSound(id));
+      list.appendChild(b);
+    }
+  }
+  for (const b of list.children) b.classList.toggle('is-on', b.dataset.sound === settings.sound);
+}
+
+/** Pick a group: its first sound, or the next one if the group is already chosen. */
+function pickGroup(group) {
+  const ids = Object.keys(SOUNDS).filter((id) => SOUNDS[id].group === group);
+  const at = ids.indexOf(settings.sound);
+  setSound(at < 0 ? ids[0] : ids[(at + 1) % ids.length]);
 }
 
 function setChords(on) {
@@ -358,6 +429,62 @@ function setKey(k) {
   keys.releaseAll();
   refreshKeyLabels();
   save();
+}
+
+/* --------------------------------- effects -------------------------------- */
+
+/** Whose effects the knobs turn: 'live' (what you play now) or a layer number. */
+let fxTarget = 'live';
+const fxKnobs = {};
+
+function selectFxTarget(target) {
+  fxTarget = target;
+  const values = engine.fxValues(target);
+  for (const [name, knob] of Object.entries(fxKnobs)) knob.set(values[name], false);
+  $('muteBtn').setAttribute('aria-pressed', String(!!values.mute));
+  $('muteBtn').hidden = target === 'live';
+  $('fxPanel').classList.toggle('is-layer', target !== 'live');
+  $('fxWho').textContent = target === 'live' ? 'what you play' : `layer ${target + 1} only`;
+  renderFxTargets(keptLayers(engine.loop));
+  $('loopLayers').dataset.key = ''; // repaint the dots with the new selection
+  renderLayers(engine.loop);
+}
+
+function renderFxTargets(kept) {
+  const seg = $('fxTarget');
+  const key = `${kept}|${fxTarget}`;
+  if (seg.dataset.key === key) return;
+  seg.dataset.key = key;
+  seg.innerHTML = '';
+  const add = (label, target, title) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.title = title;
+    b.classList.toggle('is-on', fxTarget === target);
+    b.addEventListener('click', () => selectFxTarget(target));
+    seg.appendChild(b);
+  };
+  add('Live', 'live', 'Effects on what you play now; new layers start with these');
+  for (let i = 0; i < kept; i++) add(String(i + 1), i, `Layer ${i + 1}'s own effects`);
+}
+
+function setFx(name, value) {
+  engine.setFx(fxTarget, name, value);
+  if (fxTarget === 'live') {
+    settings.fx[name] = value;
+    save();
+  }
+}
+
+function formatLevel(v) {
+  const g = levelGain(v);
+  if (g < 0.001) return 'silent';
+  const db = 20 * Math.log10(g);
+  return `${db >= 0 ? '+' : '−'}${Math.abs(db).toFixed(1)} dB`;
+}
+
+function seconds(t) {
+  return t < 1 ? `${Math.round(t * 1000)} ms` : `${t.toFixed(1)} s`;
 }
 
 /* ---------------------------------- record -------------------------------- */
@@ -468,15 +595,32 @@ function formatFilter(v) {
 
 function wire() {
   // Sounds.
-  const soundSeg = $('soundSeg');
-  SOUND_ORDER.forEach((name, i) => {
+  for (const [i, g] of GROUPS.entries()) {
     const b = document.createElement('button');
-    b.dataset.sound = name;
-    b.innerHTML = `${SOUNDS[name].label}<kbd>${i + 1}</kbd>`;
-    b.title = `${SOUNDS[name].label} (${i + 1})`;
-    b.addEventListener('click', () => setSound(name));
-    soundSeg.appendChild(b);
-  });
+    b.dataset.group = g.id;
+    b.innerHTML = `${g.label}<kbd>${i + 1}</kbd>`;
+    b.title = `${g.label} (${i + 1}; press again for the next one)`;
+    b.addEventListener('click', () => pickGroup(g.id));
+    $('groupSeg').appendChild(b);
+  }
+  for (const el of $('shapeKnobs').querySelectorAll('[data-shape]')) {
+    const name = el.dataset.shape;
+    const spec = SHAPE_KNOBS[name];
+    shapeKnobs[name] = new Knob(el, {
+      label: spec.label,
+      value: settings.shape[name],
+      def: 0.5,
+      bipolar: true,
+      small: true,
+      hue: spec.hue,
+      format: spec.format,
+      onChange: (v) => {
+        settings.shape[name] = v;
+        engine.setShape(name, v);
+        save();
+      }
+    });
+  }
   $('chordBtn').addEventListener('click', () => setChords(!settings.chords));
   $('keyDown').addEventListener('click', () => setKey(settings.key - 1));
   $('keyUp').addEventListener('click', () => setKey(settings.key + 1));
@@ -505,6 +649,7 @@ function wire() {
   // Loop.
   $('loopBtn').addEventListener('click', () => loop('press'));
   $('undoBtn').addEventListener('click', () => loop('undo'));
+  $('redoBtn').addEventListener('click', () => loop('redo'));
   $('clearBtn').addEventListener('click', () => loop('clear'));
   $('stopBtn').addEventListener('click', () => loop('stop'));
 
@@ -524,24 +669,27 @@ function wire() {
   });
   $('micBtn').addEventListener('click', startMic);
 
-  // Effects and volume.
+  // Effects (for the live sound or the selected layer) and volume.
   for (const el of $('fxKnobs').querySelectorAll('[data-fx]')) {
     const name = el.dataset.fx;
     const spec = FX_KNOBS[name];
-    new Knob(el, {
+    fxKnobs[name] = new Knob(el, {
       label: spec.label,
       value: settings.fx[name] ?? spec.def ?? 0,
       def: spec.def ?? 0,
       bipolar: spec.bipolar,
       hue: spec.hue,
       format: spec.format,
-      onChange: (v) => {
-        settings.fx[name] = v;
-        engine.setFx(name, v);
-        save();
-      }
+      onChange: (v) => setFx(name, v)
     });
   }
+  $('muteBtn').addEventListener('click', () => {
+    if (fxTarget === 'live') return;
+    const on = !engine.fxValues(fxTarget).mute;
+    engine.setFx(fxTarget, 'mute', on);
+    $('muteBtn').setAttribute('aria-pressed', String(on));
+    renderLayers(engine.loop);
+  });
   new Knob($('volumeKnob'), {
     label: 'Volume',
     value: settings.volume,
@@ -567,16 +715,27 @@ function wire() {
 
   // Studio shortcuts, while the keyboard is the instrument's.
   window.addEventListener('keydown', (e) => {
-    if (!keys.active || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!keys.active || e.altKey) return;
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    // The usual undo and redo, alongside the studio's own keys.
+    if (e.ctrlKey || e.metaKey) {
+      if (e.code === 'KeyZ') {
+        e.preventDefault();
+        loop(e.shiftKey ? 'redo' : 'undo');
+      } else if (e.code === 'KeyY') {
+        e.preventDefault();
+        loop('redo');
+      }
+      return;
+    }
     const digit = /^Digit([1-9])$/.exec(e.code);
     if (e.code === 'Space') {
       e.preventDefault();
       if (!e.repeat) loop('press');
     } else if (e.code === 'Backspace') {
       e.preventDefault();
-      loop('undo');
+      loop(e.shiftKey ? 'redo' : 'undo');
     } else if (e.code === 'Delete') {
       e.preventDefault();
       loop('clear');
@@ -584,8 +743,8 @@ function wire() {
       setChords(!settings.chords);
     } else if (e.code === 'KeyB' && !e.repeat) {
       setBeat(engine.beatName ? '' : settings.lastBeat);
-    } else if (digit && SOUND_ORDER[digit[1] - 1]) {
-      setSound(SOUND_ORDER[digit[1] - 1]);
+    } else if (digit && GROUPS[digit[1] - 1] && !e.repeat) {
+      pickGroup(GROUPS[digit[1] - 1].id);
     }
   });
   // A space released on a focused button would click it too.
@@ -632,7 +791,8 @@ refreshKeyLabels();
 renderKeyState(keys.state());
 renderLoop(engine.loop);
 renderMic();
-for (const [name, v] of Object.entries(settings.fx)) engine.setFx(name, v);
+for (const [name, v] of Object.entries(settings.fx)) engine.setFx('live', name, v);
+selectFxTarget('live');
 engine.setVolume(settings.volume);
 midi.connect();
 boot();

@@ -42,21 +42,38 @@ make a song, with no setup. The mic switches on by itself.
   way while a falling one spins it the other. The lower-left circle does the same
   for the music: keys, loop and beat.
 - **Loop**: one button, like a loop pedal. Press `Space` to record, press again
-  and it loops, press again to add a layer, press again to keep it. `Backspace`
-  undoes the last layer and `Delete` clears everything. Loops are recorded dry and
-  played back through the effects, so turning a knob changes the whole loop live.
+  and it loops, press again to add a layer, press again to keep it. Up to eight
+  layers. **Undo** (`Backspace` or `Ctrl+Z`) takes back the last layer and **Redo**
+  (`Shift+Backspace`, `Ctrl+Shift+Z` or `Ctrl+Y`) puts it back, until you record
+  something new. `Delete` clears everything.
 - **Beat**: Pulse, Groove or Trap (`B` turns it on and off) and a tempo knob. With
   a beat running a take snaps to 1, 2, 4 or 8 whole bars and starts on the nearest
   downbeat, so loops always line up however sloppily you press. If you make a loop
   first and add the beat afterwards, the tempo snaps to fit the loop instead.
-- **Sound**: Pad, Keys, Pluck, Bass and Lead (`1` to `5`). **Chords** (`C`) makes
-  every key play a whole chord that belongs to the key you're in, so nothing you
-  press can sound wrong. **Key** moves the whole keyboard; `Z` and `X` change
-  octave.
+- **Sound**: twenty sounds in five groups (`1` to `5` picks a group; press it
+  again for the next sound in it):
+  - **Keys**: Soft Keys, E-Piano, Organ, Bells, Marimba
+  - **Pads**: Warm Pad, Strings, Choir, Glass
+  - **Bass**: Sub Bass, 808, Wobble (synced to the beat), Reese
+  - **Lead**: Square Lead, Supersaw, Chiptune, Whistle
+  - **Pluck**: Pluck, Harp, Kalimba, Stab
+
+  **Tone**, **Attack** and **Release** reshape whichever one you pick; the centre
+  is the sound as designed. Basses and some leads play one note at a time and
+  glide between notes.
+- **Keys** (left of the keyboard): **Chords** (`C`) makes every key play a whole
+  chord that belongs to the key you're in, so nothing you press can sound wrong.
+  **Key** moves the whole keyboard; `Z` and `X` change octave.
 - **Effects**: Drive (soft-clip distortion), Crush (bit crusher), Filter (a DJ
   filter: left of centre is darker, right is thinner, centre does nothing), Echo
-  (dotted eighths, synced to the tempo) and Space (reverb). Drag, scroll or use the
-  arrow keys; double-click resets a knob.
+  (dotted eighths, synced to the tempo), Space (reverb) and Level. Drag, scroll or
+  use the arrow keys; double-click resets a knob.
+- **Effects per layer**: every loop layer keeps its own effects. A new layer
+  starts with the **Live** effects as they were while you recorded it, so it keeps
+  sounding the way you played it when you change the knobs afterwards. Click a
+  layer's number (in the Loop panel or above the knobs) and the knobs turn just
+  that layer: crush the drums you beatboxed, filter one layer away, or **Mute** it.
+  Undo and Redo keep each layer's settings.
 - **Record song** in the titlebar saves everything you hear to a file.
 
 **Headphones.** The Studio never plays your mic through the speakers, because it
@@ -273,8 +290,8 @@ tests/theory.test.mjs   npm test
 consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
 ratios, the piano tuning curve, that each figure spins at its real beat rate, and
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
-looper's timing (latency, bar snapping, pre-roll, undo), the effect curves, the
-beat grid, chord mode, and the main process's URL, path and permission rules.
+looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per
+layer), the effect curves, the beat grid, the sound library, chord mode, and the main process's URL, path and permission rules.
 
 The piano model's treble asymptote and octave-type curve are the paper's fitted
 values; its bass asymptote and transition width are fitted per instrument there, so
