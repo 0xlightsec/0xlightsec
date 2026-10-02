@@ -1,0 +1,60 @@
+# Builds PRISM for Windows on a real Windows machine, launches the packaged
+# PRISM.exe and drives it (both pages, a music track, and each Electron fuse
+# against the attack it stops), then publishes the app as a downloadable
+# artifact on the run.
+name: PRISM Windows build
+
+on:
+  push:
+    paths:
+      - 'prism/**'
+      - '.github/workflows/prism-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: prism
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prism/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Package PRISM.exe
+        run: node scripts/package.mjs win32 x64 --no-zip
+
+      - name: Launch and drive the packaged app
+        run: node scripts/smoke.mjs dist/PRISM-win32-x64/PRISM.exe smoke-windows.png
+
+      - name: Screenshot from the smoke test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshot
+          path: prism/smoke-windows.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish the app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRISM-win32-x64
+          path: prism/dist/PRISM-win32-x64
+          retention-days: 90
+          compression-level: 9

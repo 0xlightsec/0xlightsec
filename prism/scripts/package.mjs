@@ -13,21 +13,25 @@
  *
  * ASAR integrity validation is deliberately left off: it needs integrity data
  * embedded in the executable, and a build that refuses to start can't be checked
- * from here. Finally the folder is zipped (symlinks preserved).
+ * from here. Only the English UI locale is kept (Electron falls back to it; the
+ * others only translate built-in menus). Finally the folder is zipped, symlinks
+ * preserved, unless --no-zip is given (CI uploads the folder as an artifact).
  */
 
 import { packager } from '@electron/packager';
 import { flipFuses, FuseVersion, FuseV1Options } from '@electron/fuses';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-const platform = process.argv[2] ?? process.platform;
-const arch = process.argv[3] ?? 'x64';
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const platform = args[0] ?? process.platform;
+const arch = args[1] ?? 'x64';
+const zipIt = !process.argv.includes('--no-zip');
 
 const [appDir] = await packager({
   dir: root,
@@ -67,7 +71,15 @@ await flipFuses(binary, {
   [FuseV1Options.GrantFileProtocolExtraPrivileges]: false
 });
 
-const zip = `${appDir}.zip`;
-if (existsSync(zip)) rmSync(zip);
-execFileSync('zip', ['-r', '-y', '-q', path.basename(zip), path.basename(appDir)], { cwd: dist });
-console.log(`built ${path.relative(root, appDir)}\nzipped ${path.relative(root, zip)}`);
+const locales = path.join(appDir, 'locales');
+if (platform !== 'darwin' && existsSync(locales)) {
+  for (const f of readdirSync(locales)) if (f !== 'en-US.pak') rmSync(path.join(locales, f));
+}
+
+console.log(`built ${path.relative(root, appDir)}`);
+if (zipIt) {
+  const zip = `${appDir}.zip`;
+  if (existsSync(zip)) rmSync(zip);
+  execFileSync('zip', ['-r', '-y', '-q', '-9', path.basename(zip), path.basename(appDir)], { cwd: dist });
+  console.log(`zipped ${path.relative(root, zip)}`);
+}

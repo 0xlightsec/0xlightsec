@@ -6,8 +6,10 @@ other harmonically get colours that sit next to each other visually. Play a fift
 the screen resolves to one colour and white. Play a tritone and it splits into
 opposites.
 
-**Windows:** download `PRISM-win32-x64.zip`, unzip it anywhere, and run
-`PRISM.exe` — no install, no Node. It isn't code-signed, so the first time
+**Windows:** open the latest **PRISM Windows build** run under the repository's
+**Actions** tab, download the `PRISM-win32-x64` artifact, unzip it anywhere, and
+run `PRISM.exe` — no install, no Node. Every build is made on a real Windows
+machine, which launches the packaged app and drives it before publishing it. It isn't code-signed, so the first time
 Windows SmartScreen will say it "protected your PC": click **More info → Run
 anyway**.
 
@@ -195,6 +197,7 @@ waveform, volume, reverb and release. Settings persist between sessions.
 main.js                 Electron main — window, prism:// scheme, guards
 security.js             URL, file and permission rules (Electron-free, tested)
 scripts/package.mjs     packaged build: asar, fuses, zip
+scripts/smoke.mjs       launches a packaged build and drives it (also checks the fuses)
 build/                  app icon (PNG for Linux, ICO for Windows)
 preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js

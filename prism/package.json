@@ -8,7 +8,8 @@
     "start": "electron .",
     "test": "node tests/theory.test.mjs",
     "package:win": "node scripts/package.mjs win32 x64",
-    "package:linux": "node scripts/package.mjs linux x64"
+    "package:linux": "node scripts/package.mjs linux x64",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@electron/fuses": "^2.1.3",
