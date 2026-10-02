@@ -50,8 +50,11 @@ function envelope(t, length, attack = 0.012, release = 0.04) {
   return Math.min(1, t / attack, Math.max(0, (length - t) / release));
 }
 
-/** Play `notes` ([midi, beats]) at `bpm`, calling draw(u, time, noteIndex) per sample. */
-function sequence(sr, bpm, notes, draw, transpose = 0) {
+/**
+ * Play `notes` ([midi, beats]) at `bpm`, calling draw(u, time, noteIndex) per
+ * sample. `env` sets the per-note attack and release in seconds.
+ */
+function sequence(sr, bpm, notes, draw, transpose = 0, env = { attack: 0.012, release: 0.04 }) {
   const beat = 60 / bpm;
   const total = notes.reduce((a, [, b]) => a + b * beat, 0);
   const n = Math.round(total * sr);
@@ -66,7 +69,7 @@ function sequence(sr, bpm, notes, draw, transpose = 0) {
     for (let k = 0; k < count && i < n; k++, i++) {
       const t = k / sr;
       const [x, y] = draw(phase, i / sr, index);
-      const e = envelope(t, len) * 0.86;
+      const e = envelope(t, len, env.attack, env.release) * 0.86;
       left[i] = x * e;
       right[i] = y * e;
       phase += f / sr;
@@ -185,7 +188,34 @@ function starAndShapes(sr) {
   });
 }
 
+/**
+ * The classic first lesson: a sine on X and a cosine on Y draw a circle. Add the
+ * same square wave to both channels and the beam jumps between two places every
+ * other turn, so you see two circles — and hear the square wave as a buzz an
+ * octave below the tone. The jump is eased over a few samples rather than taken
+ * instantly, which would be a click.
+ */
+function twoCircles(sr) {
+  const notes = [[45, 4], [45, 4], [43, 4], [41, 4], [45, 4], [48, 4], [43, 4], [45, 4]];
+  const ease = 0.008; // fraction of a turn spent crossing: fast enough to stay faint
+  return sequence(sr, 100, notes, (u) => {
+    const turn = Math.floor(u);
+    const w = u - turn;
+    const side = turn % 2 ? 1 : -1;
+    let s = side;
+    if (w < ease) {
+      const k = w / ease;
+      s = -side + (side - -side) * k * k * (3 - 2 * k);
+    }
+    const th = TAU * u;
+    return [0.34 * Math.cos(th) + s * 0.4, 0.34 * Math.sin(th) + s * 0.3];
+    // Almost no fade between notes: a longer one shrinks the picture, and the
+    // persistence leaves rings of smaller circles behind.
+  }, 0, { attack: 0.003, release: 0.006 });
+}
+
 export const TRACKS = [
+  { id: 'circles', name: 'Two Circles', render: twoCircles },
   { id: 'intervals', name: 'Lissajous Intervals', render: intervals },
   { id: 'cube', name: 'Spinning Cube', render: cube },
   { id: 'rose', name: 'Rose Garden', render: rose },

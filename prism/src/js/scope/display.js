@@ -15,8 +15,8 @@ import { sampleAt } from './measure.js';
 const DIV_X = 10;
 const DIV_Y = 8;
 export const CHANNEL_HUE = { 1: 52, 2: 186 }; // the usual scope colours: CH1 yellow, CH2 cyan
-const XY_HUE = 40;
-const MUSIC_HUE = 128; // P31 green, the phosphor oscilloscope music is usually shown on
+/** Phosphor colours for the picture views (Shapes, X-Y, Music). */
+export const PHOSPHORS = { pink: 314, green: 128, amber: 38, blue: 205 };
 const TRIGGER_DIV = 1; // trigger point sits one division in from the left
 const STATUS_BAND = 34; // px kept clear above and below the graticule
 
@@ -29,6 +29,15 @@ export class ScopeDisplay {
     this.w = 0;
     this.h = 0;
     this.dpr = 1;
+    this.phosphor = PHOSPHORS.pink;
+    this.gridVisible = true;
+  }
+
+  /** The picture views look best on a bare screen; the measurement views need the grid. */
+  setGrid(visible) {
+    if (visible === this.gridVisible) return;
+    this.gridVisible = visible;
+    this.drawGrid();
   }
 
   resize() {
@@ -76,9 +85,10 @@ export class ScopeDisplay {
   drawGrid() {
     const g = this.gctx;
     g.clearRect(0, 0, this.w, this.h);
+    if (!this.gridVisible) return;
     const { left, top, sw, sh, divX, divY, cx, cy } = this;
 
-    g.strokeStyle = 'rgba(150, 190, 170, 0.10)';
+    g.strokeStyle = 'rgba(200, 180, 205, 0.09)';
     g.lineWidth = 1;
     g.beginPath();
     for (let i = 1; i < DIV_X; i++) {
@@ -94,7 +104,7 @@ export class ScopeDisplay {
     g.stroke();
 
     // Centre axes, with fifth-of-a-division ticks like a real graticule.
-    g.strokeStyle = 'rgba(170, 210, 190, 0.22)';
+    g.strokeStyle = 'rgba(215, 195, 220, 0.2)';
     g.beginPath();
     g.moveTo(left, Math.round(cy) + 0.5);
     g.lineTo(left + sw, Math.round(cy) + 0.5);
@@ -113,7 +123,7 @@ export class ScopeDisplay {
     }
     g.stroke();
 
-    g.strokeStyle = 'rgba(170, 210, 190, 0.28)';
+    g.strokeStyle = 'rgba(215, 195, 220, 0.26)';
     g.strokeRect(left + 0.5, top + 0.5, sw - 1, sh - 1);
   }
 
@@ -222,7 +232,7 @@ export class ScopeDisplay {
     b.beginPath();
     b.rect(this.left, this.top, this.sw, this.sh);
     b.clip();
-    beam(b, path, XY_HUE, intensity);
+    beam(b, path, this.phosphor, intensity);
     b.restore();
   }
 
@@ -254,7 +264,7 @@ export class ScopeDisplay {
     b.beginPath();
     b.rect(this.left, this.top, this.sw, this.sh);
     b.clip();
-    beam(b, path, CHANNEL_HUE[ch.id], intensity);
+    beam(b, path, this.phosphor, intensity);
     b.restore();
   }
 
@@ -293,8 +303,10 @@ export class ScopeDisplay {
     b.beginPath();
     b.rect(this.left, this.top, this.sw, this.sh);
     b.clip();
-    const weight = [1, 0.5, 0.1];
-    for (let k = 2; k >= 0; k--) beam(b, bands[k], MUSIC_HUE, intensity * weight[k]);
+    // Roughly brightness ∝ 1/speed, as on a CRT: a jump crossing the screen in a
+    // few samples moves ~50x faster than a traced stroke and all but vanishes.
+    const weight = [1, 0.35, 0.03];
+    for (let k = 2; k >= 0; k--) beam(b, bands[k], this.phosphor, intensity * weight[k]);
     b.restore();
   }
 
@@ -346,10 +358,12 @@ function beam(ctx, path, hue, intensity) {
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  // A wide faint bloom first: phosphor light spreads into the glass around the trace.
   const passes = [
-    { width: 7, alpha: 0.07, light: 52 },
-    { width: 2.6, alpha: 0.32, light: 56 },
-    { width: 1.1, alpha: 0.95, light: 78 }
+    { width: 18, alpha: 0.03, light: 50 },
+    { width: 7, alpha: 0.07, light: 54 },
+    { width: 2.6, alpha: 0.32, light: 60 },
+    { width: 1.1, alpha: 0.95, light: 82 }
   ];
   for (const p of passes) {
     ctx.strokeStyle = `hsla(${hue}, 100%, ${p.light}%, ${Math.min(1, p.alpha * intensity).toFixed(3)})`;
@@ -410,5 +424,160 @@ export class MiniTrace {
     ctx.lineWidth = 1.2;
     ctx.stroke(path);
     ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
+/* ---------------------------- spectrum analyzer ---------------------------- */
+
+const F_MIN = 20;
+const F_MAX = 20000;
+const DB_MIN = -105;
+const DB_MAX = -15;
+
+/** x position (0..width) of a frequency on a log axis from 20 Hz to 20 kHz. */
+export function logX(freq, width) {
+  return (Math.log(freq / F_MIN) / Math.log(F_MAX / F_MIN)) * width;
+}
+
+/** Frequency at x on that axis. */
+export function freqAtX(x, width) {
+  return F_MIN * Math.pow(F_MAX / F_MIN, x / width);
+}
+
+/**
+ * Log-frequency spectrum: a red fill for the smoothed energy, a white line for
+ * the live spectrum and a fainter one for the peaks, which fall back slowly.
+ * Each pixel column shows the loudest bin in its frequency range, so a narrow
+ * peak at high frequency is never lost between columns.
+ */
+export class SpectrumView {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.w = 0;
+    this.h = 0;
+    this.live = null;
+    this.smooth = null;
+    this.peak = null;
+  }
+
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(rect.width * dpr));
+    const h = Math.max(1, Math.round(rect.height * dpr));
+    if (w === this.canvas.width && h === this.canvas.height) return;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.w = rect.width;
+    this.h = rect.height;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cols = Math.max(1, Math.ceil(this.w));
+    this.live = new Float32Array(cols).fill(DB_MIN);
+    this.smooth = new Float32Array(cols).fill(DB_MIN);
+    this.peak = new Float32Array(cols).fill(DB_MIN);
+  }
+
+  /** Fold analyser bins (dB) into one value per pixel column. `db` may be null. */
+  update(db, sampleRate, dt) {
+    this.resize();
+    if (!db) return;
+    const cols = this.live.length;
+    const binHz = sampleRate / 2 / db.length;
+    const raw = this.raw && this.raw.length === cols ? this.raw : (this.raw = new Float32Array(cols));
+    for (let c = 0; c < cols; c++) {
+      const f0 = freqAtX(c, cols);
+      const f1 = freqAtX(c + 1, cols);
+      const b0 = Math.floor(f0 / binHz);
+      const b1 = Math.ceil(f1 / binHz);
+      let v = -Infinity;
+      if (b1 - b0 <= 1) {
+        // Narrower than a bin (low frequencies): interpolate between bin centres
+        // instead of drawing a staircase.
+        const x = (f0 + f1) / 2 / binHz;
+        const i = Math.min(db.length - 2, Math.max(0, Math.floor(x)));
+        v = db[i] + (db[i + 1] - db[i]) * (x - i);
+      } else {
+        for (let b = b0; b < b1 && b < db.length; b++) if (db[b] > v) v = db[b];
+      }
+      raw[c] = Number.isFinite(v) ? Math.max(DB_MIN, Math.min(DB_MAX, v)) : DB_MIN;
+    }
+    // Average over a sixth of an octave, the usual smoothing for a readable
+    // spectrum: individual harmonics merge into one curve.
+    const half = Math.max(1, Math.round(cols / Math.log2(F_MAX / F_MIN) / 12));
+    let sum = 0;
+    for (let c = 0; c < Math.min(cols, half); c++) sum += raw[c];
+    for (let c = 0; c < cols; c++) {
+      const add = c + half;
+      const drop = c - half - 1;
+      if (add < cols) sum += raw[add];
+      if (drop >= 0) sum -= raw[drop];
+      const n = Math.min(cols - 1, c + half) - Math.max(0, c - half) + 1;
+      const v = sum / n;
+      this.live[c] = v;
+      const s = this.smooth[c];
+      this.smooth[c] = s + (v - s) * (v > s ? 0.5 : 0.1);
+      this.peak[c] = Math.max(v, this.peak[c] - 14 * dt);
+    }
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    const { w, h } = this;
+    if (!w || !h) return;
+    ctx.clearRect(0, 0, w, h);
+    const top = 16;
+    const y = (v) => h - ((v - DB_MIN) / (DB_MAX - DB_MIN)) * (h - top);
+
+    // Log grid: faint lines at each 1-9 step, labels at the decades.
+    ctx.lineWidth = 1;
+    for (let d = 10; d <= 10000; d *= 10) {
+      for (let m = 1; m <= 9; m++) {
+        const f = m * d;
+        if (f < F_MIN || f > F_MAX) continue;
+        const x = Math.round(logX(f, w)) + 0.5;
+        ctx.strokeStyle = m === 1 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.07)';
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+    }
+    ctx.font = '10px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.textBaseline = 'top';
+    for (const [f, label] of [[100, '100Hz'], [1000, '1kHz'], [10000, '10kHz']]) ctx.fillText(label, logX(f, w) + 4, 3);
+
+    if (!this.smooth) return;
+    const cols = this.smooth.length;
+    const path = (arr) => {
+      const p = new Path2D();
+      for (let c = 0; c < cols; c++) {
+        const yy = y(arr[c]);
+        if (c === 0) p.moveTo(0, yy);
+        else p.lineTo(c, yy);
+      }
+      return p;
+    };
+
+    // The red mass of the energy, brightest where it's loudest.
+    const fill = path(this.smooth);
+    fill.lineTo(cols, h);
+    fill.lineTo(0, h);
+    fill.closePath();
+    const g = ctx.createLinearGradient(0, top, 0, h);
+    g.addColorStop(0, 'rgba(255, 40, 85, 0.95)');
+    g.addColorStop(0.55, 'rgba(225, 10, 60, 0.85)');
+    g.addColorStop(1, 'rgba(120, 0, 30, 0.75)');
+    ctx.fillStyle = g;
+    ctx.fill(fill);
+
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke(path(this.peak));
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke(path(this.live));
   }
 }

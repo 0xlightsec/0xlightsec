@@ -61,6 +61,17 @@ export class ScopeEngine {
 
     this.trim = ctx.createGain();
 
+    // Spectrum of everything on the scope. Alignment doesn't matter for a
+    // spectrum, so the built-in FFT is the right tool here.
+    this.spectrum = ctx.createAnalyser();
+    this.spectrum.fftSize = 8192;
+    this.spectrum.smoothingTimeConstant = 0.5;
+    this.spectrum.minDecibels = -110;
+    this.spectrum.maxDecibels = -10;
+    this.bus.connect(this.spectrum);
+    this.trim.connect(this.spectrum);
+    this.spectrumDb = new Float32Array(this.spectrum.frequencyBinCount);
+
     // Ring buffers the worklet fills, and the linear copies the display reads.
     this.rings = [0, 1, 2, 3].map(() => new Float32Array(HISTORY));
     this.write = 0;
@@ -184,6 +195,13 @@ export class ScopeEngine {
     return true;
   }
 
+  /** Current spectrum in dB per bin, or null before audio has started. */
+  readSpectrum() {
+    if (!this.spectrum) return null;
+    this.spectrum.getFloatFrequencyData(this.spectrumDb);
+    return this.spectrumDb;
+  }
+
   /* ------------------------------ music player ----------------------------- */
 
   /** Play an audio file; its left channel drives X and its right drives Y. */
@@ -197,6 +215,7 @@ export class ScopeEngine {
       // Straight to the volume control: music is mastered already and must not
       // be squashed by the generator's limiter.
       this.musicSource.connect(this.master);
+      this.musicSource.connect(this.spectrum);
       if (this.captureNode) this.musicSource.connect(this.captureNode, 0, 2);
     }
     if (this.musicUrl) URL.revokeObjectURL(this.musicUrl);

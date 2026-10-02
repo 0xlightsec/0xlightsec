@@ -43,36 +43,41 @@
 
   <main class="scope-main" id="scopeMain">
     <div class="scope-bezel">
-      <canvas id="grid"></canvas>
-      <canvas id="beam"></canvas>
+      <div class="scope-area" id="scopeArea">
+        <canvas id="grid"></canvas>
+        <canvas id="beam"></canvas>
 
-      <div class="scope-status scope-status-top">
-        <span class="st-run" id="stRun">RUN</span>
-        <span class="st-trig" id="stTrig">AUTO</span>
-        <span class="st-mode" id="stMode">SHAPES</span>
+        <div class="scope-status scope-status-top">
+          <span class="st-run" id="stRun">RUN</span>
+          <span class="st-trig" id="stTrig">AUTO</span>
+          <span class="st-mode" id="stMode">SHAPES</span>
+        </div>
+        <div class="scope-status scope-status-bottom">
+          <span class="st-ch1" id="stCh1">CH1 200mV</span>
+          <span class="st-ch2" id="stCh2">CH2 50mV</span>
+          <span id="stTime">M 2.00ms</span>
+          <span id="stTrigSrc">T CH1 ↑ 0.00</span>
+        </div>
+        <div class="scope-hint" id="scopeHint">Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing</div>
+        <div class="player" id="player" hidden>
+          <select id="musicPick" aria-label="Track">
+            <option value="" disabled selected>Choose a track…</option>
+            <optgroup label="Built in" id="builtinTracks"></optgroup>
+            <optgroup label="Your files" id="userTracks" hidden></optgroup>
+            <option value="open">Open audio file…</option>
+          </select>
+          <input type="file" id="musicFile" accept="audio/*,.wav,.flac,.mp3,.ogg,.opus,.m4a,.aac" hidden />
+          <button class="pill" id="musicPlay" disabled>Play</button>
+          <span class="player-name" id="musicName">or drop a stereo file on the screen</span>
+          <input type="range" id="musicSeek" min="0" max="1000" value="0" disabled aria-label="Position" />
+          <span class="player-time" id="musicTime">0:00</span>
+        </div>
+        <div class="drop-veil" id="dropVeil" hidden><span>Drop to play on the scope</span></div>
+        <div class="scope-note" id="xyNote" hidden>CH1 → X · CH2 → Y · a sine on CH1 draws Lissajous figures</div>
       </div>
-      <div class="scope-status scope-status-bottom">
-        <span class="st-ch1" id="stCh1">CH1 200mV</span>
-        <span class="st-ch2" id="stCh2">CH2 50mV</span>
-        <span id="stTime">M 2.00ms</span>
-        <span id="stTrigSrc">T CH1 ↑ 0.00</span>
+      <div class="spectrum-band" id="spectrumBand">
+        <canvas id="spectrum" aria-label="Spectrum analyzer"></canvas>
       </div>
-      <div class="scope-hint" id="scopeHint">Play with <kbd>A</kbd>…<kbd>'</kbd> · turn the mic on and sing</div>
-      <div class="player" id="player" hidden>
-        <select id="musicPick" aria-label="Track">
-          <option value="" disabled selected>Choose a track…</option>
-          <optgroup label="Built in" id="builtinTracks"></optgroup>
-          <optgroup label="Your files" id="userTracks" hidden></optgroup>
-          <option value="open">Open audio file…</option>
-        </select>
-        <input type="file" id="musicFile" accept="audio/*,.wav,.flac,.mp3,.ogg,.opus,.m4a,.aac" hidden />
-        <button class="pill" id="musicPlay" disabled>Play</button>
-        <span class="player-name" id="musicName">or drop a stereo file on the screen</span>
-        <input type="range" id="musicSeek" min="0" max="1000" value="0" disabled aria-label="Position" />
-        <span class="player-time" id="musicTime">0:00</span>
-      </div>
-      <div class="drop-veil" id="dropVeil" hidden><span>Drop to play on the scope</span></div>
-      <div class="scope-note" id="xyNote" hidden>CH1 → X · CH2 → Y · a sine on CH1 draws Lissajous figures</div>
     </div>
   </main>
 
@@ -97,6 +102,15 @@
         <div class="ctl-row">
           <button class="pill" id="runBtn">Run / Stop <kbd>space</kbd></button>
           <button class="pill" id="autosetBtn" title="Fit both channels and the timebase to the signal">Autoset</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Phosphor</span>
+        <div class="ctl-row">
+          <div class="seg" id="phosphorSeg">
+            <button data-phosphor="pink" class="is-on dot" title="Pink" aria-label="Pink"><i style="--c:hsl(314,100%,66%)"></i></button><button data-phosphor="green" class="dot" title="Green" aria-label="Green"><i style="--c:hsl(128,100%,58%)"></i></button><button data-phosphor="amber" class="dot" title="Amber" aria-label="Amber"><i style="--c:hsl(38,100%,58%)"></i></button><button data-phosphor="blue" class="dot" title="Blue" aria-label="Blue"><i style="--c:hsl(205,100%,62%)"></i></button>
+          </div>
+          <button class="pill" id="spectrumBtn" aria-pressed="true">Spectrum</button>
         </div>
       </div>
       <div class="ctl">

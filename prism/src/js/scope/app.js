@@ -9,7 +9,7 @@
  */
 
 import { ScopeEngine, WAVEFORMS } from './engine.js';
-import { ScopeDisplay, MiniTrace, CHANNEL_HUE, TRIGGER_DIV } from './display.js';
+import { ScopeDisplay, MiniTrace, SpectrumView, CHANNEL_HUE, PHOSPHORS, TRIGGER_DIV } from './display.js';
 import { findTrigger, peakToPeak, rms, toDb } from './measure.js';
 import { detectPitch } from '../io/audio-in.js';
 import { KeyboardInstrument } from '../io/keyboard.js';
@@ -44,6 +44,8 @@ const settings = {
   volume: 0.4,
   octave: 4,
   velocity: 0.8,
+  phosphor: 'pink',
+  spectrum: true,
   ...load()
 };
 
@@ -51,6 +53,7 @@ const engine = new ScopeEngine();
 const display = new ScopeDisplay($('grid'), $('beam'));
 const mini1 = new MiniTrace($('ch1Mini'), CHANNEL_HUE[1]);
 const mini2 = new MiniTrace($('ch2Mini'), CHANNEL_HUE[2]);
+const spectrum = new SpectrumView($('spectrum'));
 
 let running = true;
 const voice = { hz: 0, clarity: 0, at: 0 };
@@ -346,6 +349,12 @@ function frame(now) {
   st.classList.toggle('is-trig', triggered && settings.display === 'yt');
   st.classList.toggle('is-auto', !triggered && settings.display === 'yt');
 
+  // A stopped capture freezes the spectrum too: no new data, and the peaks hold.
+  if (settings.spectrum) {
+    spectrum.update(running && engine.ctx ? engine.readSpectrum() : null, sr, dt);
+    spectrum.draw();
+  }
+
   if (now - lastReadoutAt > 80) {
     lastReadoutAt = now;
     if (engine.ctx) renderReadout(now, span);
@@ -384,6 +393,8 @@ function setDisplay(mode) {
     b.setAttribute('aria-selected', String(on));
   }
   display.clear();
+  // Measurement views keep the graticule; picture views get a bare screen.
+  display.setGrid(mode === 'yt' || mode === 'xy');
   $('xyNote').hidden = mode === 'yt' || mode === 'music';
   $('player').hidden = mode !== 'music';
   $('xyNote').textContent = mode === 'xy'
@@ -466,6 +477,20 @@ function wire() {
     engine.setWaveform(w);
     save();
   });
+  segment('phosphorSeg', 'phosphor', settings.phosphor, (name) => {
+    settings.phosphor = name;
+    display.phosphor = PHOSPHORS[name];
+    save();
+  });
+  const showSpectrum = (on) => {
+    settings.spectrum = on;
+    $('spectrumBand').hidden = !on;
+    $('spectrumBtn').setAttribute('aria-pressed', String(on));
+    save();
+  };
+  $('spectrumBtn').addEventListener('click', () => showSpectrum(!settings.spectrum));
+  showSpectrum(settings.spectrum);
+
   segment('trigSeg', 'trig', settings.trigger, (t) => {
     settings.trigger = t;
     save();
@@ -641,6 +666,8 @@ function save() {
 
 if (!WAVEFORMS.includes(settings.waveform)) settings.waveform = 'sawtooth';
 if (!['shapes', 'yt', 'xy', 'music'].includes(settings.display)) settings.display = 'shapes';
+if (!(settings.phosphor in PHOSPHORS)) settings.phosphor = 'pink';
+display.phosphor = PHOSPHORS[settings.phosphor];
 engine.waveform = settings.waveform;
 engine.volume = settings.volume;
 wireWindowChrome();
