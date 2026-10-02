@@ -233,4 +233,41 @@ check('peak-to-peak, RMS and dBFS of a sine are what the maths says', () => {
   assert.ok(Math.abs(rms(buf) - 0.5 / Math.SQRT2) < 1e-3);
   assert.ok(Math.abs(toDb(1) - 0) < 1e-9 && toDb(0) === -90);
 });
+
+const { createRequire } = await import('node:module');
+const security = createRequire(import.meta.url)('../security.js');
+const pathMod = await import('node:path');
+console.log('\nmain-process security');
+const ROOT = pathMod.resolve('src');
+check('app URLs are recognised by scheme and host, not by .origin', () => {
+  assert.ok(security.isAppUrl('prism://app/index.html'));
+  assert.ok(security.isAppUrl('prism://app'));
+  assert.ok(!security.isAppUrl('prism://evil/index.html'));
+  assert.ok(!security.isAppUrl('https://app/'));
+  assert.ok(!security.isAppUrl('file:///etc/passwd'));
+  assert.ok(!security.isAppUrl('not a url'));
+});
+check('the protocol handler refuses traversal, malformed and null-byte paths', () => {
+  assert.equal(security.resolveRequest('prism://app/js/app.js', ROOT), pathMod.join(ROOT, 'js/app.js'));
+  assert.equal(security.resolveRequest('prism://app/', ROOT), pathMod.join(ROOT, 'index.html'));
+  for (const bad of ['prism://app/..%2fmain.js', 'prism://app/%2e%2e%2fpackage.json', 'prism://app/js/..%2f..%2fmain.js', 'prism://app/%E0%A4%A', 'prism://app/index.html%00.js'])
+    assert.equal(security.resolveRequest(bad, ROOT), null, bad);
+});
+check('permissions: mic audio and MIDI for the app only; never camera or anything else', () => {
+  const app = 'prism://app/scope.html';
+  assert.ok(security.permitted('media', app, { mediaTypes: ['audio'] }));
+  assert.ok(!security.permitted('media', app, { mediaTypes: ['video'] }));
+  assert.ok(!security.permitted('media', app, { mediaTypes: ['audio', 'video'] }));
+  assert.ok(!security.permitted('media', app, {}));
+  assert.ok(security.permitted('midi', app) && security.permitted('midiSysex', app));
+  for (const p of ['geolocation', 'notifications', 'clipboard-read', 'fullscreen', 'openExternal'])
+    assert.ok(!security.permitted(p, app), p);
+  assert.ok(!security.permitted('media', 'https://evil.example', { mediaTypes: ['audio'] }));
+  assert.ok(!security.permitted('midi', 'https://evil.example'));
+});
+check('only https leaves the app', () => {
+  assert.ok(security.isExternalAllowed('https://example.com'));
+  for (const u of ['http://example.com', 'file:///etc/passwd', 'javascript:alert(1)', 'smb://host/share', 'nope'])
+    assert.ok(!security.isExternalAllowed(u), u);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

@@ -20,7 +20,8 @@ export class MidiInput {
     try {
       this.access = await navigator.requestMIDIAccess({ sysex: false });
     } catch (err) {
-      this.status = 'denied';
+      // A refusal and a machine without MIDI support need different fixes.
+      this.status = err?.name === 'NotAllowedError' || err?.name === 'SecurityError' ? 'denied' : 'unavailable';
       this.handlers.onStatus?.(this.status, [], err?.message);
       return false;
     }

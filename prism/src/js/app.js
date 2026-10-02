@@ -242,11 +242,12 @@ function renderMidiStatus(status, devices, detail) {
     'no-devices': 'MIDI: no devices found',
     unsupported: 'MIDI: not supported in this build',
     denied: `MIDI: permission denied${detail ? ' — ' + detail : ''}`,
+    unavailable: `MIDI: not available on this system${detail ? ' — ' + detail : ''}`,
     idle: 'MIDI: not connected'
   };
   el.textContent = messages[status] ?? `MIDI: ${status}`;
   el.classList.toggle('is-ok', status === 'connected');
-  el.classList.toggle('is-bad', status === 'denied' || status === 'unsupported');
+  el.classList.toggle('is-bad', status === 'denied' || status === 'unsupported' || status === 'unavailable');
 
   const previous = select.value;
   select.innerHTML = '<option value="all">All devices</option>';

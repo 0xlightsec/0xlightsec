@@ -9,6 +9,6 @@
     "test": "node tests/theory.test.mjs"
   },
   "devDependencies": {
-    "electron": "^32.0.0"
+    "electron": "^44.5.1"
   }
 }
