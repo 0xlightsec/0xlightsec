@@ -821,6 +821,49 @@ check('effect slots: add one and it is heard, take it out and it does nothing; s
   assert.equal(back.inserts, daw.INSERTS + 3, 'extra inserts come back');
   assert.deepEqual(daw.stripSlots(back.data.mixer[1]), ['drive']); assert.deepEqual(daw.stripSlots(back.data.mixer[2]), ['clip']);
 });
+check('automation curves: smooth runs through the points like an EQ curve and never overshoots', () => {
+  const pts = [{ t: 0, v: 0.1 }, { t: 16, v: 0.9 }, { t: 32, v: 0.2 }, { t: 48, v: 0.2 }];
+  for (const p of pts) assert.ok(Math.abs(daw.autoValue(pts, p.t) - p.v) < 1e-9, `through ${p.t}`);
+  for (let t = 0; t <= 48; t += 0.5) {
+    const v = daw.autoValue(pts, t);
+    assert.ok(v >= 0.1 - 1e-9 && v <= 0.9 + 1e-9, `no overshoot at ${t}: ${v}`);
+  }
+  assert.ok(daw.autoValue(pts, 15.5) < 0.9 && daw.autoValue(pts, 16.5) < 0.9, 'a rounded peak');
+  assert.equal(daw.autoValue(pts, 40), 0.2, 'flat stays flat');
+  assert.equal(daw.autoValue(pts, -5), 0.1); assert.equal(daw.autoValue(pts, 99), 0.2); assert.equal(daw.autoValue([], 3), null);
+});
+check('the parabola bend: tension bows a segment into x² or √x and further; the other shapes step, pulse and wobble', () => {
+  const bend = (c) => daw.autoValue([{ t: 0, v: 0, s: 'bend', c }, { t: 16, v: 1 }], 8);
+  assert.ok(Math.abs(bend(-1 / 3) - 0.25) < 1e-9, 'x² at the middle is a quarter');
+  assert.ok(Math.abs(bend(1 / 3) - Math.SQRT1_2) < 1e-9, '√x');
+  assert.ok(bend(-1) < 0.01 && bend(1) > 0.9, 'all the way: needle-sharp or fat');
+  assert.ok(Math.abs(bend(0) - 0.5) < 1e-9, 'no tension is straight');
+  const shape = (s, c, t) => daw.autoValue([{ t: 0, v: 0, s, c }, { t: 16, v: 1 }], t);
+  assert.equal(shape('hold', 0, 15.9), 0);
+  assert.equal(daw.autoCount(-1), 1); assert.equal(daw.autoCount(1), 16);
+  const stairs = new Set(Array.from({ length: 160 }, (_, k) => shape('stairs', -0.6, k / 10)));
+  assert.equal(stairs.size, daw.autoCount(-0.6) + 1, 'that many steps up');
+  const pulses = Array.from({ length: 64 }, (_, k) => shape('pulse', -0.6, k / 4));
+  assert.ok(pulses.every((v) => v === 0 || v === 1) && pulses.filter((v, k) => k && v !== pulses[k - 1]).length >= 7, 'chops between the two values');
+  assert.ok(Math.abs(shape('wave', 0, 0)) < 1e-9 && Math.abs(shape('wave', 0, 16) - 1) < 1e-9, 'a wave starts on one value and ends on the next');
+});
+check('automating an effect: a flat line at the knob, or a ready shape; cleared, or gone with the effect; saved with the song', () => {
+  const s = daw.newSong();
+  s.addEffect(1, 'filter'); s.data.mixer[1].fx.filter = 0.3;
+  const a = s.automate(1, 'filter');
+  assert.deepEqual(a.points, [{ t: 0, v: 0.3 }, { t: s.songSteps, v: 0.3 }]);
+  s.automate(2, 'gate', 'spikes');
+  assert.ok(daw.stripSlots(s.data.mixer[2]).includes('gate'), 'automating puts the effect in a slot');
+  s.data.mixer[2].auto.gate.points.push({ t: 'x', v: 9 }, { t: 3, v: 2, s: 'nonsense', c: 7 });
+  const back = daw.loadSong(JSON.stringify(s.toJSON()));
+  assert.deepEqual(back.data.mixer[1].auto.filter.points, a.points);
+  const g = back.data.mixer[2].auto.gate.points;
+  assert.ok(g.every((p) => p.v >= 0 && p.v <= 1 && (!p.c || Math.abs(p.c) <= 1) && (!p.s || daw.AUTO_SHAPES.includes(p.s))), 'junk cleaned');
+  assert.ok(g.every((p, k) => !k || p.t >= g[k - 1].t), 'in time order');
+  assert.ok(g.some((p) => p.s === 'bend'), 'shapes survive');
+  s.clearAutomation(1, 'filter'); assert.equal(s.data.mixer[1].auto, undefined);
+  s.removeEffect(2, 'gate'); assert.equal(s.data.mixer[2].auto, undefined);
+});
 check('swing pushes every second sixteenth; positions read bar:beat:step', () => {
   assert.equal(daw.swingOffset(1, 0.5), 0.25); assert.equal(daw.swingOffset(2, 0.5), 0); assert.equal(daw.swingOffset(1.5, 0.5), 0);
   assert.equal(daw.formatPosition(0), '1:1:1'); assert.equal(daw.formatPosition(21), '2:2:2');

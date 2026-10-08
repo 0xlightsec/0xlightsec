@@ -155,6 +155,20 @@ empty playlist puts the current pattern in at bar 1.
 - **Renaming:** double-click a name.
 - **Effects:** click a strip to see its effects. Like FL's slots, the strip lists
   what's on it, **+ Add effect** puts another one in, and **×** takes it out.
+- **Automation:** **▾** on an effect drops down its lane, a timeline as long as
+  the song with its sections marked, where you draw the knob over time:
+  - Drag the line to put a point there. The curve flows through the points
+    smoothly, like an EQ curve, without overshooting.
+  - Drag the **◦** handle in the middle of a stretch to bend it into a parabola:
+    needle-sharp peaks one way, fat round ones the other.
+  - Right-click a stretch to choose its shape: smooth, bend, hold, stairs, pulse
+    or wave. Tension sets how many steps, chops or wobbles.
+  - Right-click or double-click a point to delete it. `Shift` moves off the grid.
+  - Quick shapes: Ramp up, Ramp down, Swell, Dip, Spikes, Wobble.
+
+  Automation plays in **SONG** mode, and the knob turns with it. In PAT mode the
+  knob's own setting is used. Exported WAVs follow the curves too. An automated
+  effect is marked **AUTO**, and **Clear** hands it back to the knob.
 
 | effect | what it does |
 |---|---|
@@ -495,7 +509,8 @@ src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
 src/js/daw/             model.js (song, patterns, playlist, mixer, undo) · midi-file.js ·
                         instruments.js · mixer.js · engine.js · songs-db.js ·
                         cynmixx.js (the one-click beat generator) · app.js
-src/js/daw/views/       rack.js · piano-roll.js · piano-keys.js · playlist.js · mixer-view.js · browser.js ·
+src/js/daw/views/       rack.js · piano-roll.js · piano-keys.js · playlist.js · mixer-view.js ·
+                        automation-lane.js · browser.js ·
                         datacenter.js (the backdrop)
 src/js/studio/          (the Live page) engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
                         sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·
@@ -515,7 +530,8 @@ the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
 beatmaker's song model (steps and notes, muted notes, pattern and song playback, loops and
 clip repeats, beats, undo, loading untrusted files), MIDI file reading and writing,
 the mixer growing and shrinking (a new channel gets its own insert; removing one
-re-routes its channels), effect slots, the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
+re-routes its channels), effect slots, automation curves (smooth without overshoot,
+the parabola bend, stairs, pulses, waves; saved and cleaned on load), the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
 on it, every melodic note in the Phrygian key, the octave-up hook, slides, re-rolls
 that keep the other half, re-rolling after a save), the scales, the clipper and gate,
 the looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per

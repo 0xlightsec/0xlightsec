@@ -26,6 +26,10 @@ const TICK_MS = 25;
 const START_DELAY = 0.06;
 const RENDER_CHUNK = 2;    // export: seconds booked per pause
 const RENDER_AHEAD = 0.5;  // and how far past the next pause
+const AUTO_DT = 0.04;      // export: how often automation is applied
+
+/** Does any mixer strip have an automation curve? */
+const hasAutomation = (song) => song.data.mixer.some((t) => t.auto && Object.keys(t.auto).length);
 
 function limiter(ctx) {
   const l = ctx.createDynamicsCompressor();
@@ -48,6 +52,7 @@ export class Rig {
     this.instruments = new Map();
     this.taps = taps;
     this.bpm = 0;
+    this.automating = false;
   }
 
   sync(song) {
@@ -70,7 +75,7 @@ export class Rig {
         this.instruments.delete(id);
       }
     }
-    this.mixer.update(song.data.mixer);
+    this.mixer.update(song.data.mixer, this.automating);
     if (song.data.bpm !== this.bpm) {
       this.bpm = song.data.bpm;
       this.mixer.setTempo(this.bpm);
@@ -94,6 +99,24 @@ export class Rig {
       const time = (k) => origin + (k + swingOffset(k, swing)) * step;
       for (let k = Math.ceil(s0 - 1e-9); k < s1; k++) this.mixer.gateStep(time(k), time(k + 1) - time(k));
     }
+  }
+
+  /**
+   * Automation: in song mode, automated effects follow their curves. Turning it
+   * off puts every effect back on its knob.
+   */
+  automate(song, step) {
+    if (!this.automating) {
+      this.automating = true;
+      this.mixer.update(song.data.mixer, true);
+    }
+    this.mixer.automate(song.data.mixer, step);
+  }
+
+  stopAutomating(song) {
+    if (!this.automating) return;
+    this.automating = false;
+    this.mixer.update(song.data.mixer, false);
   }
 
   cancel() {
@@ -226,6 +249,7 @@ export class DawEngine {
     clearInterval(this.timer);
     this.timer = 0;
     this.rig.cancel();
+    this.rig.stopAutomating(this.song);
     this.finishRecording();
   }
 
@@ -254,6 +278,9 @@ export class DawEngine {
       if (this.metronome) this.bookClicks(s0, s1);
     }
     this.booked = Math.max(this.booked, until);
+    // Automation follows what you're hearing now, in song mode.
+    if (this.mode === 'song' && hasAutomation(this.song)) this.rig.automate(this.song, this.position() ?? 0);
+    else this.rig.stopAutomating(this.song);
   }
 
   bookClicks(s0, s1) {
@@ -380,10 +407,17 @@ export class DawEngine {
         booked = s1;
       }
     };
+    // Automation is applied as the render goes, every AUTO_DT, as playback does every tick.
+    const automated = mode === 'song' && hasAutomation(song);
+    const at = (t) => Math.max(0, (t - origin) / step);
+    if (automated) rig.automate(song, 0);
     bookUntil(RENDER_CHUNK + RENDER_AHEAD);
-    for (let t = RENDER_CHUNK; t < seconds; t += RENDER_CHUNK) {
+    const every = automated ? AUTO_DT : RENDER_CHUNK;
+    for (let k = 1; k * every < seconds; k++) {
+      const t = k * every;
       off.suspend(t).then(() => {
         bookUntil(t + RENDER_CHUNK + RENDER_AHEAD);
+        if (automated) rig.automate(song, Math.min(at(t), period));
         off.resume();
       });
     }

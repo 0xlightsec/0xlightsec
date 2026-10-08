@@ -180,6 +180,21 @@ async function drive() {
       return Math.sqrt(sum / d.length).toFixed(4);
     })()`);
     check(parseFloat(hood) > 0.12 && parseFloat(hood) < 0.6, 'the generated hook renders loud but not crushed', `${hood} rms`);
+    const swept = await evaluate(`(async () => {
+      const { newSong } = await import('./js/daw/model.js');
+      const { DawEngine } = await import('./js/daw/engine.js');
+      const treble = async (automate) => {
+        const s = newSong(); s.applyBeat(s.currentPattern.id, 'trap');
+        s.addClip({ track: 0, pattern: s.currentPattern.id, start: 0, length: 32 }); s.data.mode = 'song';
+        if (automate) s.automate(0, 'filter', null), (s.data.mixer[0].auto.filter.points = [{ t: 0, v: 0.02 }, { t: 32, v: 0.5 }]);
+        const d = (await new DawEngine(s).render('song', { tail: 0, sampleRate: 22050 })).getChannelData(0);
+        const part = (a, b) => { let e = 0; for (let i = Math.floor(a * d.length) + 1; i < b * d.length; i++) e += (d[i] - d[i - 1]) ** 2; return e; };
+        return [part(0, 0.15), part(0.85, 1)];
+      };
+      const [p, a] = [await treble(false), await treble(true)];
+      return [(a[0] / p[0]).toFixed(3), (a[1] / p[1]).toFixed(3)];
+    })()`);
+    check(swept[0] < 0.5 && swept[1] > 0.7, 'exports follow automation: a filter swept open', `treble ${swept[0]} of normal at the start, ${swept[1]} at the end`);
     const rendered = await evaluate(`(async () => {
       const { newSong } = await import('./js/daw/model.js');
       const { DawEngine } = await import('./js/daw/engine.js');

@@ -11,7 +11,7 @@
  */
 
 import { FxChain, SpaceBus } from '../studio/fx.js';
-import { INSERTS } from './model.js';
+import { INSERTS, autoValue } from './model.js';
 
 const SILENT = 1e-4;
 
@@ -29,10 +29,10 @@ export class Strip {
     this.buf = new Float32Array(512);
   }
 
-  /** Bring the strip in line with its settings, touching only what changed. */
-  update(strip, audible) {
+  /** Bring the strip in line with its settings, touching only what changed (and leaving automated effects to their curves). */
+  update(strip, audible, automated = null) {
     const want = { ...strip.fx, level: strip.volume, mute: !audible };
-    for (const [k, v] of Object.entries(want)) if (this.fx.values[k] !== v) this.fx.set(k, v);
+    for (const [k, v] of Object.entries(want)) if (this.fx.values[k] !== v && !automated?.[k]) this.fx.set(k, v);
     if (this.pan !== strip.pan) {
       this.pan = strip.pan;
       this.panner.pan.setTargetAtTime(strip.pan, this.ctx.currentTime, 0.01);
@@ -98,12 +98,25 @@ export class Mixer {
     return this.strip(i).input;
   }
 
-  update(tracks) {
+  /** `automating`: the song is playing its automation, so automated effects follow their curves, not their knobs. */
+  update(tracks, automating = false) {
     this.resize(tracks.length - 1);
     const soloing = tracks.slice(1).some((t) => t.solo);
     tracks.forEach((t, i) => {
       const audible = i === 0 ? !t.mute : soloing ? t.solo && !t.mute : !t.mute;
-      this.strip(i).update(t, audible);
+      this.strip(i).update(t, audible, automating ? t.auto : null);
+    });
+  }
+
+  /** Set every automated effect to its curve's value at a step of the song. */
+  automate(tracks, step) {
+    tracks.forEach((t, i) => {
+      if (!t.auto) return;
+      const fx = this.strip(i).fx;
+      for (const [k, a] of Object.entries(t.auto)) {
+        const v = autoValue(a.points, step);
+        if (v !== null && Math.abs((fx.values[k] ?? 0) - v) > 0.002) fx.set(k, v);
+      }
     });
   }
 

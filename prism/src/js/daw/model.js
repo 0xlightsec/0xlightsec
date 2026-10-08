@@ -68,16 +68,118 @@ export const FX_NEUTRAL = { drive: 0, crush: 0, filter: 0.5, tape: 0, clip: 0, g
 /** Where an effect starts when it's added to a strip: enough to hear it. */
 export const FX_START = { drive: 0.3, crush: 0.35, filter: 0.3, tape: 0.4, clip: 0.3, gate: 0.75, echo: 0.3, space: 0.3 };
 
+/*
+ * Automation: an effect's knob drawn over the song. A curve is a list of points
+ * { t: step, v: 0..1 }, and each point says how the line runs on to the next:
+ *
+ *   smooth  through the points like an EQ curve (monotone, so it never overshoots)
+ *   bend    a parabola-like bow, set by the tension c (−1 sags … +1 bulges):
+ *           sharp spiky peaks one way, fat round ones the other
+ *   hold    stays put, then jumps
+ *   stairs  in steps; c sets how many
+ *   pulse   chops between the two values; c sets how fast
+ *   wave    wobbles from one value to the other; c sets how fast
+ */
+export const AUTO_SHAPES = ['smooth', 'bend', 'hold', 'stairs', 'pulse', 'wave'];
+const AUTO_MAX_POINTS = 256;
+
+/** How many steps, pulses or wobbles a segment's tension asks for: 1 at −1 up to 16 at +1. */
+export const autoCount = (c) => Math.round(1 + ((clamp(num(c, 0), -1, 1) + 1) / 2) * 15);
+
+/** The bend's exponent: tension 0 is a straight line, ±1/3 a parabola (x² or √x), ±1 as far as x⁸ or x^⅛. */
+export const autoPower = (c) => Math.pow(2, -3 * clamp(num(c, 0), -1, 1));
+
+/** Slopes at each point for the smooth shape: zero at a peak or dip, so it never overshoots (Fritsch–Butland). */
+function autoTangents(points) {
+  const n = points.length;
+  const d = [];
+  for (let i = 0; i < n - 1; i++) d.push((points[i + 1].v - points[i].v) / Math.max(1e-9, points[i + 1].t - points[i].t));
+  return points.map((_, i) => {
+    if (i === 0) return d[0] ?? 0;
+    if (i === n - 1) return d[n - 2] ?? 0;
+    const a = d[i - 1], b = d[i];
+    return a * b <= 0 ? 0 : (2 * a * b) / (a + b);
+  });
+}
+
+/** The value of an automation curve at a step (null with no points). */
+export function autoValue(points, step) {
+  if (!points?.length) return null;
+  const n = points.length;
+  if (step <= points[0].t) return points[0].v;
+  if (step >= points[n - 1].t) return points[n - 1].v;
+  let i = 0;
+  while (i < n - 2 && step >= points[i + 1].t) i++;
+  const a = points[i], b = points[i + 1];
+  const span = Math.max(1e-9, b.t - a.t);
+  const x = (step - a.t) / span;
+  const dv = b.v - a.v;
+  let v;
+  switch (a.s ?? 'smooth') {
+    case 'bend':
+      v = a.v + dv * Math.pow(x, autoPower(a.c));
+      break;
+    case 'hold':
+      v = a.v;
+      break;
+    case 'stairs': {
+      const k = autoCount(a.c) + 1;
+      v = a.v + (dv * Math.min(k - 1, Math.floor(x * k))) / (k - 1);
+      break;
+    }
+    case 'pulse':
+      v = (x * autoCount(a.c)) % 1 < 0.5 ? a.v : b.v;
+      break;
+    case 'wave': {
+      const half = 2 * autoCount(a.c) - 1; // odd half-cycles: start on a, end on b
+      v = (a.v + b.v) / 2 - (dv / 2) * Math.cos(Math.PI * half * x);
+      break;
+    }
+    default: {
+      const m = autoTangents(points);
+      const x2 = x * x, x3 = x2 * x;
+      v = (2 * x3 - 3 * x2 + 1) * a.v + (x3 - 2 * x2 + x) * span * m[i] + (-2 * x3 + 3 * x2) * b.v + (x3 - x2) * span * m[i + 1];
+    }
+  }
+  return clamp(v, 0, 1);
+}
+
+/** Ready-made curves over a song of `steps`, around a starting value. */
+export const AUTO_PRESETS = {
+  rampUp: { label: 'Ramp up', points: (steps) => [{ t: 0, v: 0.05, s: 'bend', c: 0.33 }, { t: steps, v: 0.95 }] },
+  rampDown: { label: 'Ramp down', points: (steps) => [{ t: 0, v: 0.95, s: 'bend', c: -0.33 }, { t: steps, v: 0.05 }] },
+  swell: { label: 'Swell', points: (steps) => [{ t: 0, v: 0.1 }, { t: steps / 2, v: 0.9 }, { t: steps, v: 0.1 }] },
+  dip: { label: 'Dip', points: (steps) => [{ t: 0, v: 0.85 }, { t: steps / 2, v: 0.1 }, { t: steps, v: 0.85 }] },
+  spikes: { label: 'Spikes', points: (steps) => Array.from({ length: 9 }, (_, k) => ({ t: (steps * k) / 8, v: k % 2 ? 0.95 : 0.1, s: 'bend', c: k % 2 ? -0.7 : 0.7 })) },
+  wobble: { label: 'Wobble', points: (steps) => [{ t: 0, v: 0.2, s: 'wave', c: 1 }, { t: steps, v: 0.8 }] }
+};
+
+/** Keep an automation curve sane: in range, in order, not too many points. */
+export function cleanAuto(points) {
+  if (!Array.isArray(points)) return null;
+  const out = points
+    .filter((p) => p && Number.isFinite(p.t) && Number.isFinite(p.v))
+    .slice(0, AUTO_MAX_POINTS)
+    .map((p) => {
+      const q = { t: Math.max(0, p.t), v: clamp(p.v, 0, 1) };
+      if (AUTO_SHAPES.includes(p.s) && p.s !== 'smooth') q.s = p.s;
+      if (Number.isFinite(p.c) && p.c !== 0) q.c = clamp(p.c, -1, 1);
+      return q;
+    })
+    .sort((a, b) => a.t - b.t);
+  return out.length ? out : null;
+}
+
 /** A mixer strip with its fader at unity and every effect off. */
 export function mixerStrip(name) {
   const { level, mute, ...sound } = FX_DEFAULTS;
   return { name, volume: level, pan: 0, mute: false, solo: false, fx: { ...sound, space: 0 }, slots: [] };
 }
 
-/** The effect slots a strip shows: the ones added to it, and any effect that's doing something. */
+/** The effect slots a strip shows: the ones added to it, and any effect that's doing something or automated. */
 export function stripSlots(strip) {
   const on = new Set(strip.slots ?? []);
-  for (const k of FX_ORDER) if (Math.abs((strip.fx[k] ?? FX_NEUTRAL[k]) - FX_NEUTRAL[k]) > 0.004) on.add(k);
+  for (const k of FX_ORDER) if (Math.abs((strip.fx[k] ?? FX_NEUTRAL[k]) - FX_NEUTRAL[k]) > 0.004 || strip.auto?.[k]) on.add(k);
   return FX_ORDER.filter((k) => on.has(k));
 }
 
@@ -209,12 +311,36 @@ export class Song {
     strip.slots = stripSlots({ ...strip, slots: [...(strip.slots ?? []), name] });
   }
 
-  /** Take an effect out of a strip: it's set back to doing nothing. */
+  /** Take an effect out of a strip: it's set back to doing nothing (and loses its automation). */
   removeEffect(i, name) {
     const strip = this.data.mixer[i];
     if (!strip || !(name in FX_NEUTRAL)) return;
     strip.fx[name] = FX_NEUTRAL[name];
+    this.clearAutomation(i, name);
     strip.slots = stripSlots({ ...strip, slots: (strip.slots ?? []).filter((k) => k !== name) });
+  }
+
+  /**
+   * Draw an effect's knob over time: a curve as long as the song, starting as a
+   * flat line where the knob is now (or one of the ready-made shapes).
+   */
+  automate(i, name, preset = null) {
+    const strip = this.data.mixer[i];
+    if (!strip || !(name in FX_NEUTRAL)) return null;
+    const steps = this.songSteps;
+    const points = preset && AUTO_PRESETS[preset]
+      ? AUTO_PRESETS[preset].points(steps)
+      : [{ t: 0, v: strip.fx[name] }, { t: steps, v: strip.fx[name] }];
+    strip.auto = { ...strip.auto, [name]: { points } };
+    if (!(strip.slots ?? []).includes(name)) strip.slots = stripSlots({ ...strip, slots: [...(strip.slots ?? []), name] });
+    return strip.auto[name];
+  }
+
+  clearAutomation(i, name) {
+    const strip = this.data.mixer[i];
+    if (!strip?.auto?.[name]) return;
+    delete strip.auto[name];
+    if (!Object.keys(strip.auto).length) delete strip.auto;
   }
 
   /**
@@ -545,6 +671,12 @@ export function loadSong(raw) {
       strip.solo = !!t?.solo;
       for (const k of Object.keys(strip.fx)) strip.fx[k] = clamp(num(t?.fx?.[k], strip.fx[k]), 0, 1);
       strip.slots = stripSlots({ ...strip, slots: Array.isArray(t?.slots) ? t.slots.filter((k) => FX_ORDER.includes(k)) : [] });
+      for (const [k, a] of Object.entries(t?.auto ?? {})) {
+        const points = k in FX_NEUTRAL ? cleanAuto(a?.points) : null;
+        if (!points) continue;
+        strip.auto = { ...strip.auto, [k]: { points } };
+        if (!strip.slots.includes(k)) strip.slots = stripSlots({ ...strip, slots: [...strip.slots, k] });
+      }
     });
   }
   song.data.current = {

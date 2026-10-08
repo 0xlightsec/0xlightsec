@@ -10,12 +10,13 @@
  *
  * Click a strip to see its effects on the right. Like FL's slots, a strip lists
  * the effects on it, + Add effect puts another one in, × takes one out; or start
- * from a preset.
+ * from a preset. ▾ on a slot opens its automation: the knob drawn over the song.
  */
 
 import { Knob } from '../../studio/knob.js';
 import { crushBits, filterSetting, levelGain, clipGain, FX_DEFAULTS } from '../../studio/fx.js';
-import { MAX_INSERTS, FX_NEUTRAL, stripSlots } from '../model.js';
+import { MAX_INSERTS, FX_NEUTRAL, AUTO_PRESETS, stripSlots, autoValue } from '../model.js';
+import { AutomationLane } from './automation-lane.js';
 
 /** Every effect a slot can hold: [label, hue, what it does, value text, default, bipolar]. */
 const EFFECTS = {
@@ -163,6 +164,10 @@ export class MixerView {
     this.holds = [];
     this.meters = [];
     this.menuOpen = false;
+    this.lanesOpen = new Set(); // "strip:effect" with its automation lane showing
+    this.lanes = [];             // [{ lane, i, k }] drawn
+    this.knobs = new Map();      // effect -> its slot knob, for the selected strip
+    this.following = false;
     document.addEventListener('click', () => {
       if (!this.menuOpen) return;
       this.menuOpen = false;
@@ -338,21 +343,36 @@ export class MixerView {
     if (!slots.length) {
       list.appendChild(el('p', 'mx-empty', 'Nothing on this strip yet. + Add effect, or start from a preset below.'));
     }
+    this.lanes = [];
+    this.knobs.clear();
     slots.forEach((k, n) => {
       const [label, hue, what, format, def = FX_NEUTRAL[k], bipolar = false] = EFFECTS[k];
-      const row = el('div', 'mx-slot');
+      const automated = !!t.auto?.[k];
+      const open = this.lanesOpen.has(`${i}:${k}`);
+      const row = el('div', `mx-slot${automated ? ' is-auto' : ''}${open ? ' is-open' : ''}`);
       row.style.setProperty('--hue', String(hue));
       const info = el('div', 'mx-slot-info');
-      info.append(el('span', 'mx-slot-num', String(n + 1)), el('b', '', label), el('small', '', what));
+      info.append(el('span', 'mx-slot-num', String(n + 1)), el('b', '', label), el('small', '', automated ? 'automated: follows its curve in SONG mode' : what));
       const knob = el('div', 'mx-slot-knob');
-      new Knob(knob, { label, value: t.fx[k], def, bipolar, small: true, hue, format, onChange: (v) => this.studio.tweak(() => (t.fx[k] = v)) });
+      const dial = new Knob(knob, { label, value: t.fx[k], def, bipolar, small: true, hue, format, onChange: (v) => this.studio.tweak(() => (t.fx[k] = v)) });
+      this.knobs.set(k, dial);
+      const auto = el('button', `mx-slot-auto${automated ? ' is-on' : ''}`, automated ? 'AUTO ▾' : '▾');
+      auto.title = open ? 'Hide the automation' : `Draw ${label} over the song`;
+      auto.setAttribute('aria-expanded', String(open));
+      auto.addEventListener('click', () => {
+        if (open) this.lanesOpen.delete(`${i}:${k}`);
+        else this.lanesOpen.add(`${i}:${k}`);
+        this.renderFx();
+      });
       const remove = el('button', 'mx-slot-x', '×');
       remove.title = `Take ${label} off this strip`;
       remove.addEventListener('click', () => this.studio.edit(() => this.song.removeEffect(i, k)));
-      row.append(info, knob, remove);
+      row.append(info, knob, auto, remove);
       list.appendChild(row);
+      if (open) list.appendChild(this.laneFor(i, k, hue, format, label));
     });
     box.appendChild(list);
+    box.classList.toggle('has-lane', [...this.lanesOpen].some((key) => key.startsWith(`${i}:`)));
 
     const presets = el('div', 'mx-presets');
     presets.appendChild(el('span', 'ctl-label', 'Presets'));
@@ -361,12 +381,88 @@ export class MixerView {
       b.title = p.title;
       b.addEventListener('click', () => this.studio.edit(() => {
         Object.assign(t.fx, FX_NEUTRAL, p.fx);
+        delete t.auto; // a preset is a fresh start
         t.slots = stripSlots({ ...t, slots: Object.keys(p.fx) });
       }));
       presets.appendChild(b);
     }
     box.appendChild(presets);
     box.appendChild(el('p', 'mx-fx-note', 'The sound runs through the slots top to bottom; Echo and Space are sends. Double-click a knob to reset it. Gate chops in time with the song while it plays.'));
+  }
+
+  /** The drop-down under a slot: the effect's automation over the whole song. */
+  laneFor(i, k, hue, format, label) {
+    const song = this.song;
+    const strip = () => song.data.mixer[i];
+    const wrap = el('div', 'mx-lane');
+    wrap.style.setProperty('--hue', String(hue));
+    const head = el('div', 'mx-lane-head');
+    head.appendChild(el('span', 'ctl-label', strip().auto?.[k] ? `${label} over the song` : `Drag the line to automate ${label}`));
+    const shapes = el('div', 'mx-lane-shapes');
+    for (const [id, p] of Object.entries(AUTO_PRESETS)) {
+      const b = el('button', 'pill', p.label);
+      b.title = `Start from a ${p.label.toLowerCase()} over the whole song`;
+      b.addEventListener('click', () => this.studio.edit(() => song.automate(i, k, id)));
+      shapes.appendChild(b);
+    }
+    if (strip().auto?.[k]) {
+      const clear = el('button', 'pill mx-lane-clear', 'Clear');
+      clear.title = `Stop automating ${label}: the knob takes over again`;
+      clear.addEventListener('click', () => this.studio.edit(() => song.clearAutomation(i, k)));
+      shapes.appendChild(clear);
+    }
+    head.appendChild(shapes);
+    const canvas = el('canvas', 'mx-lane-canvas');
+    wrap.append(head, canvas);
+    wrap.appendChild(el('p', 'mx-lane-tip', 'Drag the line to add a point · drag ◦ to bend a stretch into a parabola · right-click a stretch for its shape (stairs, pulse, wave…) · right-click a point to delete · Shift: off the grid'));
+    // Before you touch it, the lane shows the knob as a flat line; the first touch makes it a curve.
+    const flat = () => [{ t: 0, v: strip().fx[k] }, { t: song.songSteps, v: strip().fx[k] }];
+    const lane = new AutomationLane(canvas, {
+      points: () => strip().auto?.[k]?.points ?? flat(),
+      steps: () => song.songSteps,
+      sections: () => this.sections(),
+      hue,
+      format,
+      playhead: () => this.playhead,
+      begin: () => {
+        this.studio.begin();
+        if (!strip().auto?.[k]) song.automate(i, k);
+      },
+      change: () => this.studio.change(),
+      commit: () => this.studio.commit()
+    });
+    this.lanes.push({ lane, i, k });
+    requestAnimationFrame(() => lane.draw());
+    return wrap;
+  }
+
+  /** The song's sections along the lane: where each clip in the playlist starts. */
+  sections() {
+    const song = this.song;
+    const seen = new Set();
+    return [...song.data.playlist.clips]
+      .sort((a, b) => a.start - b.start)
+      .filter((c) => !seen.has(c.start) && seen.add(c.start))
+      .map((c) => ({ start: c.start, label: song.pattern(c.pattern)?.name ?? '' }));
+  }
+
+  /**
+   * Every frame: lanes show the playhead, and automated knobs turn with their
+   * curves while the song plays (back to their own value when it stops).
+   */
+  frame(step) {
+    this.playhead = step;
+    const t = this.song.data.mixer[this.selected];
+    if (!t) return;
+    if (step !== null && t.auto) {
+      for (const [k, a] of Object.entries(t.auto)) this.knobs.get(k)?.set(autoValue(a.points, step), false);
+      this.following = true;
+    } else if (this.following) {
+      for (const [k, knob] of this.knobs) knob.set(t.fx[k], false);
+      this.following = false;
+    }
+    if (step !== null || this.lanesMoving) for (const { lane } of this.lanes) lane.draw();
+    this.lanesMoving = step !== null;
   }
 
   toggleMenu(box, i) {

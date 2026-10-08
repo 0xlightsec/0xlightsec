@@ -1041,7 +1041,10 @@ function frame(now) {
   if (ui.playlist) playlist.draw(mode === 'song' ? pos : null);
   if (ui.view === 'roll') roll.draw(mode === 'pattern' ? pos : null);
   if (ui.view === 'rack') rack.highlight(mode === 'pattern' ? pos : null);
-  if (ui.view === 'mixer' && engine.rig) mixer.drawMeters(engine.rig.mixer.peaks(), dt);
+  if (ui.view === 'mixer' && engine.rig) {
+    mixer.drawMeters(engine.rig.mixer.peaks(), dt);
+    mixer.frame(mode === 'song' ? pos : null);
+  }
   const text = formatPosition(pos ?? (mode === 'song' ? song.data.position : 0));
   if (text !== lastPos) {
     $('timeDisplay').textContent = text;
