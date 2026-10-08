@@ -131,8 +131,13 @@ and Hoodtrap) into the current pattern. In an empty song it brings its tempo too
 - **Velocity:** the lane underneath sets it, for a chord or the whole selection.
 - **Help:** other channels show as faint ghost notes, and rows in the chosen key and
   scale are lit. The scales are major, minor, Phrygian, harmonic minor and Phrygian
-  dominant. Snap goes from 1/4 to 1/32. `Ctrl`+wheel zooms time, `Alt`+wheel zooms
-  the rows and `Shift`+wheel scrolls.
+  dominant. Snap goes from 1/4 to 1/32.
+- **Zoom:** the boxes start at a comfortable size whatever the pattern's length.
+  A short pattern shows the bars after it greyed out (past its end, so notes there
+  don't play). Make the boxes smaller or bigger with the header's **↔ − +**
+  (or `Ctrl`+wheel), and the rows shorter or taller with **↕ − +** (or `Alt`+wheel).
+  `Shift`+wheel scrolls. The zoom is remembered. **Bars** sets the pattern's
+  length right there. Opening the roll on a channel scrolls to its notes.
 
 **Playlist.** Click to place the current pattern, drag to move it (`Alt` for beats
 instead of bars), drag a clip's end to stretch it, and the pattern repeats.

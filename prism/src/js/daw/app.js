@@ -59,6 +59,8 @@ const ui = {
   key: 0,
   scale: 'major',
   rollTool: 'draw',
+  rollStepW: null,  // piano roll zoom: px per step (null: fit the pattern) …
+  rollRowH: 14,     // … and row height
   chords: false,
   ghosts: true,
   recQuantize: true,
@@ -216,8 +218,15 @@ const roll = new PianoRoll($('rollCanvas'), studio, {
   inKey: (midi) => inScale(midi, ui.key, ui.scale),
   chords: () => ui.chords,
   chordFor: (midi) => chordFor(midi, ui.key, ui.scale),
-  ghosts: () => ui.ghosts
+  ghosts: () => ui.ghosts,
+  onZoom: (stepW, rowH) => {
+    ui.rollStepW = stepW;
+    ui.rollRowH = rowH;
+    saveUi();
+  }
 });
+roll.view.stepW = Number.isFinite(ui.rollStepW) ? ui.rollStepW : null;
+roll.rowH = Number.isFinite(ui.rollRowH) ? Math.min(28, Math.max(8, ui.rollRowH)) : 14;
 roll.tool = TOOLS.includes(ui.rollTool) ? ui.rollTool : 'draw';
 const playlist = new Playlist($('playlistCanvas'), studio);
 const mixer = new MixerView($('mixerView'), studio);
@@ -229,6 +238,7 @@ function showView(view) {
     ui.playlist = !ui.playlist;
   } else if (VIEWS.includes(view)) {
     ui.view = view;
+    if (view === 'roll') requestAnimationFrame(() => roll.revealIfHidden());
   }
   saveUi();
   layout();
@@ -299,6 +309,7 @@ function renderRollHead() {
   for (const b of $('rollSnap').children) b.classList.toggle('is-on', Number(b.dataset.snap) === ui.snap);
   for (const b of $('rollTools').children) b.classList.toggle('is-on', b.dataset.tool === roll.tool);
   $('rollKey').value = String(ui.key);
+  $('rollBars').value = String(song.currentPattern?.bars ?? 1);
   $('rollScale').value = ui.scale;
   $('rollChords').setAttribute('aria-pressed', String(ui.chords));
   $('chordBtn').setAttribute('aria-pressed', String(ui.chords));
@@ -1233,6 +1244,20 @@ function wire() {
     roll.reveal();
     e.target.blur();
   });
+  for (const bars of PATTERN_BARS) {
+    const o = document.createElement('option');
+    o.value = String(bars);
+    o.textContent = `${bars} bar${bars > 1 ? 's' : ''}`;
+    $('rollBars').appendChild(o);
+  }
+  $('rollBars').addEventListener('change', (e) => {
+    studio.edit(() => song.setBars(song.currentPattern.id, Number(e.target.value)));
+    e.target.blur();
+  });
+  $('rollZoomOut').addEventListener('click', () => roll.zoomTime(0.75));
+  $('rollZoomIn').addEventListener('click', () => roll.zoomTime(1.333));
+  $('rollRowsLess').addEventListener('click', () => roll.zoomRows(-2));
+  $('rollRowsMore').addEventListener('click', () => roll.zoomRows(2));
   for (const b of $('rollTools').children) {
     b.addEventListener('click', () => {
       roll.tool = ui.rollTool = b.dataset.tool;

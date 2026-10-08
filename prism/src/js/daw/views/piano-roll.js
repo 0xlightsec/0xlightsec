@@ -19,8 +19,9 @@
  *   Select   drag a box; drag the selection to move it
  * In every tool: right-click / -drag deletes, Ctrl+drag box-selects (Shift adds),
  * Shift+click adds a note to the selection, the velocity lane sets velocity.
- * Wheel scrolls pitch; Shift+wheel scrolls time; Ctrl+wheel zooms time;
- * Alt+wheel zooms the rows.
+ * Wheel scrolls pitch; Shift+wheel scrolls time; Ctrl+wheel zooms time (smaller or
+ * bigger boxes, past the end of the pattern if you like); Alt+wheel zooms the rows.
+ * The header's zoom buttons do the same.
  * Keys (while the roll is showing): Delete, Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V,
  * Ctrl+B (duplicate), ↑↓ transpose (Shift: an octave), ←→ nudge by the snap.
  */
@@ -33,6 +34,9 @@ const RULER_H = 24;
 const EDGE_PX = 7;
 const ROW_MIN = 8;
 const ROW_MAX = 28;
+export const STEP_MIN = 4;    // px per sixteenth, zoomed all the way out …
+export const STEP_MAX = 160;  // … and all the way in
+const STEP_FIT = [14, 32];    // the default: fit the pattern, but never boxes smaller or bigger than this
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -83,7 +87,7 @@ export class PianoRoll {
     this.h = 0;
     this.rowH = 14;
     this.scroll = null;     // px from the top row
-    this.view = { from: 0, steps: null }; // visible time window; steps null = the whole pattern
+    this.view = { from: 0, stepW: null }; // first step shown, and px per step (null: fit the pattern)
     this.selected = new Set();
     this.clipboard = null;
     this.lastLength = 1;
@@ -131,12 +135,42 @@ export class PianoRoll {
     return this.h - RULER_H - this.velH;
   }
 
-  get shown() {
-    return Math.min(this.steps, this.view.steps ?? this.steps);
+  /** px per sixteenth: the zoom you chose, or the pattern fitted in, within comfortable bounds. */
+  get stepW() {
+    return this.view.stepW ?? Math.min(STEP_FIT[1], Math.max(STEP_FIT[0], this.gridW / this.steps));
   }
 
-  get stepW() {
-    return this.gridW / this.shown;
+  /** How many steps fit across. */
+  get shown() {
+    return this.gridW / this.stepW;
+  }
+
+  /** How far the timeline scrolls: the pattern and a little past it, or the last note if it's further. */
+  get extent() {
+    const end = this.notes.reduce((m, n) => Math.max(m, n.start + n.length), 0);
+    return Math.max(this.steps + STEPS_PER_BAR, end + 4);
+  }
+
+  /** Zoom time by a factor around an x position (the middle of the grid if none). */
+  zoomTime(factor, x = KEYS_W + this.gridW / 2) {
+    const at = this.stepAt(x);
+    this.view.stepW = Math.min(STEP_MAX, Math.max(STEP_MIN, this.stepW * factor));
+    this.view.from = at - (x - KEYS_W) / this.view.stepW;
+    this.clampView();
+    this.opts.onZoom?.(this.view.stepW, this.rowH);
+  }
+
+  /** Taller or shorter rows, keeping the note at y where it is. */
+  zoomRows(by, y = RULER_H + this.gridH / 2) {
+    const midi = NOTE_HIGH - (y - RULER_H + this.scroll) / this.rowH;
+    this.rowH = Math.min(ROW_MAX, Math.max(ROW_MIN, this.rowH + by));
+    this.scroll = (NOTE_HIGH - midi) * this.rowH - (y - RULER_H);
+    this.scroll = Math.min(Math.max(0, this.scroll), this.maxScroll);
+    this.opts.onZoom?.(this.view.stepW, this.rowH);
+  }
+
+  clampView() {
+    this.view.from = Math.min(Math.max(0, this.view.from), Math.max(0, this.extent - this.shown));
   }
 
   get maxScroll() {
@@ -185,7 +219,15 @@ export class PianoRoll {
     if (this.scroll === null && this.gridH > 0) this.scroll = (NOTE_HIGH - 66) * this.rowH - this.gridH / 2;
     if (this.revealing && this.gridH > 0) this.reveal();
     this.scroll = Math.min(Math.max(0, this.scroll ?? 0), this.maxScroll);
-    this.view.from = Math.min(Math.max(0, this.view.from), Math.max(0, this.steps - this.shown));
+    this.clampView();
+  }
+
+  /** Bring this channel's notes into view if most of them are out of sight (opening the roll on a channel, say). */
+  revealIfHidden() {
+    if (!(this.gridH > 0)) return this.reveal();
+    const notes = this.notes;
+    const seen = notes.filter((n) => this.visible(n.midi)).length;
+    if (seen * 2 < notes.length) this.reveal();
   }
 
   /** Scroll so these notes are in view (after a channel switch, say); before the first layout, as soon as there is one. */
@@ -332,7 +374,7 @@ export class PianoRoll {
   columns(g, top, height) {
     const sw = this.stepW;
     const first = Math.floor(this.view.from);
-    for (let s = first; s <= Math.min(this.steps, this.view.from + this.shown + 1); s++) {
+    for (let s = first; s <= this.view.from + this.shown + 1; s++) {
       const bar = s % STEPS_PER_BAR === 0;
       const beat = s % 4 === 0;
       if (sw < 5 && !beat) continue;
@@ -429,10 +471,15 @@ export class PianoRoll {
     const end = this.xOf(this.steps);
     g.fillStyle = 'rgba(140, 220, 120, 0.16)';
     g.fillRect(this.xOf(0), 0, end - this.xOf(0), 3);
+    if (end < this.w) {
+      // Past the pattern's end: still there to see and draw on, but it doesn't play.
+      g.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      g.fillRect(end, 0, this.w - end, RULER_H);
+    }
     g.font = `600 10px ${MONO}`;
     g.textBaseline = 'middle';
     const sw = this.stepW;
-    for (let s = Math.floor(this.view.from / 4) * 4; s <= this.steps; s += 4) {
+    for (let s = Math.floor(this.view.from / 4) * 4; s <= this.view.from + this.shown + 4; s += 4) {
       const x = Math.round(this.xOf(s));
       if (x < KEYS_W - 1 || x > this.w) continue;
       if (s % STEPS_PER_BAR === 0) {
@@ -544,18 +591,12 @@ export class PianoRoll {
       e.preventDefault();
       const { x, y } = this.pointer(e);
       if (e.altKey) {
-        // Zoom the rows around the pointer.
-        const midi = NOTE_HIGH - (y - RULER_H + this.scroll) / this.rowH;
-        this.rowH = Math.min(ROW_MAX, Math.max(ROW_MIN, this.rowH + (e.deltaY > 0 ? -2 : 2)));
-        this.scroll = (NOTE_HIGH - midi) * this.rowH - (y - RULER_H);
+        this.zoomRows(e.deltaY > 0 ? -2 : 2, y);
       } else if (e.ctrlKey || e.metaKey) {
-        // Zoom time around the pointer.
-        const at = this.stepAt(x);
-        const next = Math.min(this.steps, Math.max(8, this.shown * (e.deltaY > 0 ? 1.25 : 0.8)));
-        this.view.steps = next >= this.steps ? null : next;
-        this.view.from = at - ((x - KEYS_W) / this.gridW) * this.shown;
+        this.zoomTime(e.deltaY > 0 ? 0.8 : 1.25, Math.max(KEYS_W, x));
       } else if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
         this.view.from += ((e.deltaX || e.deltaY) / this.stepW) * 0.5;
+        this.clampView();
       } else {
         this.scroll = Math.min(Math.max(0, this.scroll + e.deltaY * 0.6), this.maxScroll);
       }

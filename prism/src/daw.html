@@ -151,6 +151,15 @@
             <span class="magnet" title="Snap" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M4 2.5v5a4 4 0 008 0v-5"/><path d="M4 5h3M9 5h3"/></svg></span>
             <div class="seg roll-seg" id="rollSnap" aria-label="Snap"></div>
             <label class="roll-key"><span class="ctl-label">Key</span><select id="rollKey" aria-label="Key"></select><select id="rollScale" aria-label="Scale"></select></label>
+            <label class="roll-key"><span class="ctl-label">Bars</span><select id="rollBars" aria-label="Pattern length" title="How long the pattern is: notes past its end don't play"></select></label>
+            <div class="roll-zoom" role="group" aria-label="Zoom">
+              <button id="rollZoomOut" title="Smaller boxes: zoom out (Ctrl+wheel)" aria-label="Zoom out">−</button>
+              <span title="Zoom: box width">↔</span>
+              <button id="rollZoomIn" title="Bigger boxes: zoom in (Ctrl+wheel)" aria-label="Zoom in">+</button>
+              <button id="rollRowsLess" title="Shorter rows (Alt+wheel)" aria-label="Shorter rows">−</button>
+              <span title="Zoom: row height">↕</span>
+              <button id="rollRowsMore" title="Taller rows (Alt+wheel)" aria-label="Taller rows">+</button>
+            </div>
             <button class="toggle" id="rollChords" aria-pressed="false" title="Draw and play whole chords in the key (C)">Chords</button>
             <button class="toggle" id="rollGhosts" aria-pressed="true" title="Show other channels' notes faintly">Ghosts</button>
             <button class="toggle" id="recQuantize" aria-pressed="true" title="Snap recorded notes to the grid">Rec snap</button>
