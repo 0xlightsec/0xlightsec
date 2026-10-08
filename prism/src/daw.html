@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'" />
+<title>PRISM — Studio</title>
+<link rel="stylesheet" href="./styles.css" />
+<link rel="stylesheet" href="./scope.css" />
+<link rel="stylesheet" href="./studio.css" />
+<link rel="stylesheet" href="./daw.css" />
+</head>
+<body>
+<div class="app daw-app" id="app">
+
+  <header class="titlebar">
+    <div class="brand">
+      <span class="mark"></span>
+      <span class="wordmark">PRISM</span>
+      <nav class="pages" aria-label="Page">
+        <a class="page is-active" href="./daw.html" aria-current="page">Studio</a>
+        <a class="page" href="./studio.html">Live</a>
+        <a class="page" href="./index.html">Visualizer</a>
+        <a class="page" href="./scope.html">Oscilloscope</a>
+      </nav>
+    </div>
+    <div class="titlebar-right">
+      <span class="song-title" id="songTitle">Untitled</span>
+      <div class="focus-badge" id="focusBadge" data-state="captured">
+        <span class="dot"></span><span class="focus-text">KEYS CAPTURED</span>
+      </div>
+      <button class="icon-btn" id="fullscreenBtn" title="Fullscreen (F11)">Full</button>
+      <div class="win-controls">
+        <button class="win min" id="winMin" aria-label="Minimise"></button>
+        <button class="win max" id="winMax" aria-label="Maximise"></button>
+        <button class="win close" id="winClose" aria-label="Close"></button>
+      </div>
+    </div>
+  </header>
+
+  <section class="toolbar" aria-label="Transport">
+    <div class="seg mode-seg" id="modeSeg" title="Pattern or song (Ctrl+L)">
+      <button data-mode="pattern">PAT</button><button data-mode="song">SONG</button>
+    </div>
+    <button class="tp-btn play" id="playBtn" title="Play / stop (Space)" aria-label="Play">▶</button>
+    <button class="tp-btn" id="stopBtn" title="Stop" aria-label="Stop">■</button>
+    <button class="tp-btn rec" id="recBtn" aria-pressed="false" title="Record what you play into the pattern (R)" aria-label="Record">●</button>
+    <button class="tp-btn metro" id="metroBtn" aria-pressed="false" title="Metronome (M)" aria-label="Metronome">♩</button>
+    <div class="tempo" id="tempo" tabindex="0" role="spinbutton" aria-label="Tempo" title="Tempo: drag up or down, scroll, or double-click to type">
+      <span id="tempoValue">130</span><small>BPM</small>
+    </div>
+    <div class="time" id="timeDisplay" title="Bar : beat : step">1:1:1</div>
+    <div class="pattern-pick">
+      <button class="tp-mini" id="prevPattern" title="Previous pattern ([)" aria-label="Previous pattern">‹</button>
+      <select id="patternSelect" aria-label="Pattern"></select>
+      <button class="tp-mini" id="nextPattern" title="Next pattern (])" aria-label="Next pattern">›</button>
+      <button class="tp-mini" id="newPattern" title="New pattern (F4)" aria-label="New pattern">+</button>
+      <button class="tp-mini" id="clonePattern" title="Clone this pattern" aria-label="Clone pattern">⧉</button>
+      <button class="tp-mini" id="deletePattern" title="Delete this pattern (click twice)" aria-label="Delete pattern">✕</button>
+    </div>
+    <nav class="view-tabs" id="viewTabs" aria-label="Windows">
+      <button data-view="playlist" title="Playlist (F5)">Playlist</button>
+      <button data-view="rack" title="Channel Rack (F6)"><span class="long">Channel </span>Rack</button>
+      <button data-view="roll" title="Piano Roll (F7)">Piano Roll</button>
+      <button data-view="mixer" title="Mixer (F9)">Mixer</button>
+    </nav>
+    <span class="spacer"></span>
+    <button class="tp-mini" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+    <button class="tp-mini" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+    <label class="master-vol" title="Master volume"><span>Vol</span><input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume" /></label>
+    <button class="rec-song" id="projectsBtn" aria-expanded="false" title="Save and open songs (Ctrl+S saves)">Songs</button>
+    <div class="menu-wrap">
+      <button class="rec-song" id="exportBtn" aria-expanded="false" title="Export audio or MIDI">Export ▾</button>
+      <div class="menu" id="exportMenu" hidden>
+        <button data-export="wav:song">Song as WAV</button>
+        <button data-export="wav:pattern">Pattern as WAV</button>
+        <button data-export="mid:song">Song as MIDI</button>
+        <button data-export="mid:pattern">Pattern as MIDI</button>
+      </div>
+    </div>
+    <button class="rec-song" id="importBtn" title="Open a MIDI file or a .prismbeat song">Import</button>
+    <input type="file" id="importFile" accept=".mid,.midi,.prismbeat,.json" hidden />
+  </section>
+
+  <main class="workspace" id="workspace">
+    <aside class="browser" id="browser" aria-label="Browser">
+      <div class="browser-title"><span>Browser</span><small>F8</small></div>
+      <div class="browser-list" id="browserList"></div>
+      <div class="viz" title="The beat as light: the left circle follows the melody, the right one the drums">
+        <canvas id="vizGrid"></canvas>
+        <canvas id="vizBeam"></canvas>
+      </div>
+    </aside>
+
+    <div class="panes">
+      <section class="pane playlist-pane" id="playlistPane" aria-label="Playlist">
+        <canvas id="playlistCanvas"></canvas>
+        <div class="pane-hint" id="playlistHint">Click to place the current pattern · drag to move · drag the end to stretch · right-click deletes</div>
+      </section>
+
+      <section class="pane main-pane" id="mainPane">
+        <div class="view rack-view" id="rackView">
+          <header class="rack-head"></header>
+          <div class="rack-body">
+            <div class="rack-rows"></div>
+            <aside class="inspector" aria-label="Channel"></aside>
+          </div>
+        </div>
+
+        <div class="view roll-view" id="rollView" hidden>
+          <header class="roll-head">
+            <select id="rollChannel" aria-label="Channel"></select>
+            <div class="seg roll-seg" id="rollSnap" aria-label="Snap"></div>
+            <label class="roll-key"><span class="ctl-label">Key</span><select id="rollKey" aria-label="Key"></select></label>
+            <button class="toggle" id="rollChords" aria-pressed="false" title="Draw and play whole chords in the key (C)">Chords</button>
+            <button class="toggle" id="rollGhosts" aria-pressed="true" title="Show other channels' notes faintly">Ghosts</button>
+            <button class="toggle" id="recQuantize" aria-pressed="true" title="Snap recorded notes to the grid">Rec snap</button>
+            <span class="spacer"></span>
+            <button class="pill" id="rollQuantize" title="Move every note of this channel onto the grid">Quantize</button>
+            <span class="roll-tip">Ctrl+drag selects · Ctrl+C / V / B · Del · ↑↓ ←→</span>
+          </header>
+          <canvas id="rollCanvas"></canvas>
+        </div>
+
+        <div class="view mixer-view" id="mixerView" hidden>
+          <div class="mx-strips"></div>
+          <aside class="mx-fx"></aside>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <section class="key-row" id="keyRow">
+    <div class="key-ctl">
+      <button class="toggle" id="chordBtn" aria-pressed="false" title="Each key plays a whole chord that fits the key (C)">Chords <kbd>C</kbd></button>
+      <div class="key-ctl-row"><span class="ctl-label">Oct <kbd>Z</kbd><kbd>X</kbd></span><div class="stepper small"><button id="octDown" aria-label="Octave down">−</button><span id="octValue">C4</span><button id="octUp" aria-label="Octave up">+</button></div></div>
+      <div class="key-ctl-row"><span class="ctl-label">Plays</span><span class="plays" id="playsName">—</span></div>
+    </div>
+    <div class="keybed" id="keybed"></div>
+    <button class="breakaway" id="breakawayKey" data-state="captured">
+      <span class="breakaway-title" id="breakawayTitle">Breakaway</span>
+      <span class="breakaway-sub" id="breakawaySub">release keyboard</span>
+      <kbd id="breakawayKbd">esc</kbd>
+    </button>
+  </section>
+
+  <aside class="library" id="songs" hidden>
+    <header class="library-head">
+      <h2>Songs</h2>
+      <button class="icon-btn" id="songsClose" aria-label="Close">✕</button>
+    </header>
+    <form class="library-save" id="saveForm">
+      <input type="text" id="saveName" maxlength="80" spellcheck="false" aria-label="Song name" />
+      <button class="pill" id="saveBtn" type="submit">Save song</button>
+    </form>
+    <p class="library-note" id="songsNote">Saves every channel, pattern, the playlist and the mixer.</p>
+    <ul class="library-list" id="songsList"></ul>
+    <footer class="library-foot">
+      <button class="pill" id="newSongBtn" title="Start a new song (click twice)">New song</button>
+      <button class="pill" id="openSongBtn">Open a file…</button>
+    </footer>
+  </aside>
+
+  <div class="toast" id="toast" hidden></div>
+  <div class="start-veil" id="startVeil" hidden><button class="start-btn" id="startBtn">Start the studio</button></div>
+</div>
+
+<script type="module" src="./js/daw/app.js"></script>
+</body>
+</html>

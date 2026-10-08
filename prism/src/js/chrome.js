@@ -9,6 +9,13 @@ export function wireWindowChrome() {
   on('winMin', () => bridge?.minimize());
   on('winMax', () => bridge?.toggleMaximize());
   on('winClose', () => bridge?.close());
+  // F11, as the menu used to give it.
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'F11' && bridge) {
+      e.preventDefault();
+      bridge.toggleFullscreen();
+    }
+  });
 }
 
 /** Paint the titlebar badge from a KeyboardInstrument state. */

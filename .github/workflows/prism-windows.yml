@@ -1,5 +1,5 @@
 # Builds PRISM for Windows on a real Windows machine, launches the packaged
-# PRISM.exe and drives it (both pages, a music track, and each Electron fuse
+# PRISM.exe and drives it (every page, a music track, and each Electron fuse
 # against the attack it stops), then publishes the app as a downloadable
 # artifact on the run.
 name: PRISM Windows build
@@ -49,7 +49,8 @@ jobs:
           name: smoke-screenshot
           path: |
             prism/smoke-windows.png
-            prism/smoke-windows-studio.png
+            prism/smoke-windows-daw.png
+            prism/smoke-windows-live.png
           if-no-files-found: ignore
           retention-days: 14
 

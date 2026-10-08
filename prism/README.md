@@ -33,8 +33,94 @@ Google on every launch, and that is switched off.
 
 ## Studio
 
-PRISM opens on the **Studio**: two glowing circles and everything you need to
-make a song, with no setup. The mic switches on by itself.
+PRISM opens on the **Studio**, a beatmaker laid out like FL Studio. The window
+shortcuts are FL's too.
+
+| window | key | what it's for |
+|---|---|---|
+| **Browser** | `F8` | sounds, drums, kits and ready-made beats: click to hear, **+** to add |
+| **Playlist** | `F5` | the song: pattern clips on tracks along a timeline of bars |
+| **Channel Rack** | `F6` | every instrument, with a row of steps for the current pattern |
+| **Piano Roll** | `F7` | the selected channel's notes, drawn on a grid |
+| **Mixer** | `F9` | the master and 8 inserts: fader, pan, mute/solo, meter, effects |
+
+**Transport.** **PAT** loops the current pattern; **SONG** plays the Playlist
+(`Ctrl+L` switches). `Space` plays and stops. `R` arms recording. `M` turns on the
+metronome. Drag the tempo up or down, scroll it, or double-click to type one. `F4`
+makes a new pattern, and `[` / `]` step through them. `Ctrl+Z` / `Ctrl+Y` undo and
+redo anything, one gesture at a time.
+
+**Channel Rack.** A new song starts with Kick, Clap, Hat, Snare, an 808 and a
+Pluck, each on its own mixer insert, named after it. Click steps to toggle them, or
+drag across to paint. Each row also has:
+- a mute LED (right-click it to solo);
+- pan and volume knobs;
+- its mixer insert;
+- the channel button: click to select (the keyboard and MIDI play the selected
+  channel), double-click to open the piano roll.
+
+A channel with pitched or long notes shows them in miniature instead of steps. The
+panel on the right edits the selected channel: its sound (any of the 27), or its
+drum (Kick, Snare, Clap, Hat, Open Hat, Crash, Tom, Rim) and kit (Classic, Boom,
+Lo-fi, Hyper, Rage, Club, Rock). It also has Tone/Attack/Release, the mixer insert,
+quick fills (every ⅛, ¼, ½ or bar), move, clone and delete. Patterns are 1–16 bars
+long and have a swing knob. **Beats** in the Browser writes a ready-made groove
+(Pulse to Grunge) into the current pattern. In an empty song it brings its tempo too.
+
+**Piano Roll.**
+- **Draw:** click to draw at the last note's length; with **Chords** on, a click
+  draws the whole chord that fits the key.
+- **Edit:** drag to move, drag a note's end to resize, right-click (or right-drag)
+  to delete.
+- **Select:** `Ctrl`+drag box-selects and `Shift`+click adds to the selection.
+  `Ctrl+A`, `Ctrl+C`, `Ctrl+X` and `Ctrl+V` work as usual; `Ctrl+B` duplicates
+  onto the next beat or bar; `Delete` removes the selection.
+- **Move by keys:** `↑`/`↓` transpose (`Shift` for an octave) and `←`/`→` nudge by
+  the snap.
+- **Velocity:** the lane underneath sets it, for a chord or the whole selection.
+- **Help:** other channels show as faint ghost notes; rows in the chosen key are
+  lit. Snap from 1/4 to 1/32; `Ctrl`+wheel zooms and `Shift`+wheel scrolls.
+
+**Playlist.** Click to place the current pattern, drag to move it (`Alt` for beats
+instead of bars), drag a clip's end to stretch it, and the pattern repeats.
+Right-click deletes. Click a clip to make its pattern current; double-click opens
+it. Click the ruler to set where the song plays from. Switching to SONG with an
+empty playlist puts the current pattern in at bar 1.
+
+**Mixer.** Every channel plays into its insert and every insert into the master.
+Each strip has a fader, pan, mute/solo and a peak meter, and lists the channels
+feeding it. Click a strip to edit its effects: Drive, Crush, Filter, Echo (synced
+to the tempo), Space (one shared hall) and Tape. Double-click a name to rename it.
+
+**MIDI.**
+- A MIDI keyboard plays the selected channel.
+- Drum pads on MIDI channel 10 play the matching drum channels by General MIDI note
+  (36 kick, 38 snare, 39 clap, 42 hat, 46 open hat …).
+- With record armed, whatever you play, from the computer keyboard or MIDI, lands
+  in the pattern where you heard it. Output latency is taken off, and with **Rec
+  snap** on the notes snap to the grid. A whole take is one undo step.
+- **Export → Song/Pattern as MIDI** writes a standard `.mid`: drums on channel 10
+  with GM notes, a track per channel, and the tempo, ready for FL Studio, Ableton or
+  hardware. **Import** reads `.mid` files (type 0 or 1) into a new pattern. Drum
+  tracks go onto your drum channels and every other track becomes a synth channel.
+
+**Export → Song/Pattern as WAV** renders offline, faster than real time, through
+the same instruments and mixer, so the file sounds exactly like playback.
+
+**Songs** (`Ctrl+S`) keeps your songs inside the app. Open, save as a
+`.prismbeat` file, delete, or start a new one. The song you're working on is also
+kept between sessions automatically.
+
+**The keyboard** at the bottom plays the selected channel, as before: `A`…`'` and
+`W E T Y U O P`, `Z`/`X` for the octave, `C` for chords, and **Breakaway** (`Esc`)
+hands the keyboard back. The Browser's corner shows the beat as light: one circle
+follows the melody (its notes set the petals), the other the drums.
+
+## Live
+
+The **Live** page is the looper and live circles, all still there: sing to move
+the shape, and loop, layer and effect your voice and keys with no setup. The mic
+switches on by itself.
 
 - **Sing** and the upper-right circle follows your voice. Louder spins it faster
   and blooms it from a circle into a flower, the note sets the number of petals
@@ -105,7 +191,7 @@ make a song, with no setup. The mic switches on by itself.
   loops).
 - **Record song** in the titlebar saves everything you hear to a file.
 
-**Headphones.** The Studio never plays your mic through the speakers, because it
+**Headphones.** The Live page never plays your mic through the speakers, because it
 would howl. Turn on **Headphones** to hear yourself through the effects. With it
 off, the mic's echo cancellation is on, so the speakers aren't recorded into your
 loop either.
@@ -172,7 +258,7 @@ on-screen keys stay playable with the mouse either way.
 
 ## Oscilloscope
 
-Another page (switch with **Studio / Visualizer / Oscilloscope** in the titlebar): a wave
+Another page (switch with **Studio / Live / Visualizer / Oscilloscope** in the titlebar): a wave
 generator on CH1, your microphone on CH2, a glowing scope screen above and a
 readout below.
 
@@ -306,7 +392,10 @@ preload.js              the only bridge into the renderer
 src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · piano.js
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
-src/js/studio/          engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
+src/js/daw/             model.js (song, patterns, playlist, mixer, undo) · midi-file.js ·
+                        instruments.js · mixer.js · engine.js · songs-db.js · app.js
+src/js/daw/views/       rack.js · piano-roll.js · playlist.js · mixer-view.js · browser.js
+src/js/studio/          (the Live page) engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
                         sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·
                         perf-worklet.js · project.js · library.js · roll.js ·
                         roll-view.js · knob.js · app.js
@@ -321,7 +410,9 @@ tests/theory.test.mjs   npm test
 consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
 ratios, the piano tuning curve, that each figure spins at its real beat rate, and
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
-looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per
+beatmaker's song model (steps and notes, pattern and song playback, loops and
+clip repeats, beats, undo, loading untrusted files), MIDI file reading and writing,
+the looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per
 layer, saving and loading), the .prism file format, the stutter and tape-stop
 pads, the pitch shifter and autotune, the piano roll's pattern, undo and timing, the effect curves, the beat patterns and
 kits, the sound library, chord mode, and the main process's URL, path and permission rules.

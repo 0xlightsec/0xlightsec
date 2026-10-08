@@ -25,9 +25,9 @@ function arc(from, to) {
 export class Knob {
   /**
    * @param {HTMLElement} el      container; gets the knob, label and value
-   * @param {object} opts         { label, value, def, bipolar, small, format, onChange, hue }
+   * @param {object} opts         { label, value, def, bipolar, small, tiny, format, onChange, hue }
    */
-  constructor(el, { label, value = 0, def = value, bipolar = false, small = false, format = (v) => `${Math.round(v * 100)}`, onChange, hue = 314 }) {
+  constructor(el, { label, value = 0, def = value, bipolar = false, small = false, tiny = false, format = (v) => `${Math.round(v * 100)}`, onChange, hue = 314 }) {
     this.el = el;
     this.def = def;
     this.bipolar = bipolar;
@@ -35,6 +35,7 @@ export class Knob {
     this.onChange = onChange;
     el.classList.add('knob');
     el.classList.toggle('is-small', small);
+    el.classList.toggle('is-tiny', tiny); // a bare dial; label and value go in the tooltip
     el.style.setProperty('--knob-hue', String(hue));
     el.innerHTML = `
       <div class="knob-dial" tabindex="0" role="slider" aria-label="${label}" aria-valuemin="0" aria-valuemax="100">
@@ -64,6 +65,7 @@ export class Knob {
     this.valueEl.textContent = this.format(next);
     this.dial.setAttribute('aria-valuenow', String(Math.round(next * 100)));
     this.dial.setAttribute('aria-valuetext', this.format(next));
+    this.dial.title = `${this.dial.getAttribute('aria-label')}: ${this.format(next)}`;
     this.el.classList.toggle('is-active', Math.abs(next - this.def) > 0.005);
     if (notify) this.onChange?.(next);
   }

@@ -705,4 +705,99 @@ check('the player books each note once, on the clock, as time goes by', () => {
   assert.ok(Math.abs(booked[0].dur - 0.48) < 1e-9, 'held for its length (a hair short, so repeats re-strike)');
   ctx.currentTime = 1.25; assert.equal(player.position(), 6);
 });
+
+const daw = await import('../src/js/daw/model.js');
+const mf = await import('../src/js/daw/midi-file.js');
+console.log('\nbeatmaker');
+check('a new song starts like FL: kick, clap, hat, snare (plus an 808 and a pluck), each on its own mixer insert', () => {
+  const s = daw.newSong();
+  assert.deepEqual(s.channels.map((c) => c.name), ['Kick', 'Clap', 'Hat', 'Snare', '808', 'Pluck']);
+  assert.deepEqual(s.channels.map((c) => c.insert), [1, 2, 3, 4, 5, 6]);
+  assert.equal(s.data.mixer[1].name, 'Kick'); assert.equal(s.data.mixer[7].name, 'Insert 7');
+  assert.equal(s.patterns.length, 1); assert.equal(s.past.length, 0);
+});
+check('step buttons and piano-roll notes are the same notes', () => {
+  const s = daw.newSong(); const p = s.currentPattern.id, k = s.channels[0].id;
+  s.toggleStep(p, k, 4); s.toggleStep(p, k, 12);
+  assert.deepEqual(s.notes(p, k).map((n) => n.start), [4, 12]); assert.ok(s.isSteps(p, k));
+  s.toggleStep(p, k, 4); assert.deepEqual(s.notes(p, k).map((n) => n.start), [12]);
+  s.addNote(p, k, { start: 2, length: 3, midi: 64 }); assert.equal(s.isSteps(p, k), false, 'a pitched, long note needs the piano roll');
+  s.fillSteps(p, k, 4); assert.deepEqual(s.notes(p, k).map((n) => n.start), [0, 4, 8, 12]);
+});
+check('pattern mode loops the pattern; song mode plays clips, each repeating its pattern until the clip ends', () => {
+  const s = daw.newSong(); const p = s.currentPattern, k = s.channels[0].id;
+  s.toggleStep(p.id, k, 0); s.toggleStep(p.id, k, 8);
+  assert.deepEqual(daw.eventsBetween(s, 'pattern', 0, 40).map((e) => e.step), [0, 8, 16, 24, 32]);
+  s.addClip({ track: 0, pattern: p.id, start: 16, length: 24 });          // bars 2 to 3½
+  assert.equal(s.songSteps, 48);
+  const song = daw.eventsBetween(s, 'song', 0, 48);
+  assert.deepEqual(song.map((e) => e.step), [16, 24, 32]);               // 40 would be past the clip
+  assert.equal(song[2].room, 8);
+  assert.deepEqual(daw.eventsBetween(s, 'song', 48, 96).map((e) => e.step), [64, 72, 80], 'the song loops');
+  let all = []; for (let i = 0; i * 0.7 < 96; i++) all.push(...daw.eventsBetween(s, 'song', i * 0.7, Math.min(96, (i + 1) * 0.7)));
+  assert.deepEqual(all.map((e) => e.step), [16, 24, 32, 64, 72, 80], 'tiny scheduler windows: each note exactly once');
+});
+check('a built-in beat writes onto drum channels (made if missing), open hats on their own channel', () => {
+  const s = daw.newSong(); const p = s.currentPattern.id;
+  s.applyBeat(p, 'groove');
+  const hat = s.channels.find((c) => c.drum === 'hat'), open = s.channels.find((c) => c.drum === 'openhat');
+  assert.ok(open, 'open hat channel made'); assert.equal(s.notes(p, open.id).length, 1);
+  assert.equal(s.notes(p, hat.id).length, 8);
+  assert.ok(Math.abs(s.data.swing - 0.28) < 1e-9);
+  s.applyBeat(p, 'punk'); assert.equal(s.currentPattern.bars, 2, 'a 32-step crash makes a 2-bar pattern');
+  assert.equal(s.channels.find((c) => c.drum === 'kick').kit, 'rock');
+});
+check('undo and redo cover the whole song, one gesture at a time', () => {
+  const s = daw.newSong(); const p = s.currentPattern.id, k = s.channels[0].id;
+  s.checkpoint(); s.toggleStep(p, k, 0); s.settle();
+  s.checkpoint(); s.addChannel({ kind: 'synth', sound: 'pad' }); s.settle();
+  s.checkpoint(); s.settle();
+  assert.equal(s.past.length, 2);
+  s.undo(); assert.equal(s.channels.length, 6); s.undo(); assert.equal(s.notes(p, k).length, 0);
+  s.redo(); s.redo(); assert.equal(s.channels.length, 7); assert.equal(s.notes(s.currentPattern.id, k).length, 1);
+});
+check('a saved song loads back the same; nonsense is cleaned up, not trusted', () => {
+  const s = daw.newSong(); const p = s.currentPattern.id;
+  s.applyBeat(p, 'trap'); s.addClip({ track: 2, pattern: p, start: 0, length: 32 });
+  s.data.mixer[1].fx.crush = 0.5; s.channels[0].pan = -0.4;
+  const back = daw.loadSong(JSON.stringify(s.toJSON()));
+  assert.equal(back.channels.length, s.channels.length);
+  assert.deepEqual(back.channels.map((c) => [c.name, c.insert, c.kit]), s.channels.map((c) => [c.name, c.insert, c.kit]));
+  assert.equal(back.data.playlist.clips.length, 1); assert.equal(back.data.mixer[1].fx.crush, 0.5); assert.equal(back.channels[0].pan, -0.4);
+  const evA = daw.eventsBetween(s, 'pattern', 0, 16).map((e) => e.step), evB = daw.eventsBetween(back, 'pattern', 0, 16).map((e) => e.step);
+  assert.deepEqual(evB, evA);
+  const junk = daw.loadSong({ channels: [{ id: 'x', kind: 'synth', sound: 'nope', volume: 9 }], patterns: [{ id: 'q', bars: 3, notes: { x: [{ start: 0, length: 1, midi: 999 }], zz: [{ start: 0, length: 1, midi: 60 }] } }], bpm: 9999 });
+  assert.equal(junk.channels[0].sound, 'keys'); assert.equal(junk.channels[0].volume, 1); assert.equal(junk.data.bpm, 240);
+  assert.equal(junk.currentPattern.bars, 1); assert.equal(junk.notes(junk.currentPattern.id, junk.channels[0].id)[0].midi, daw.NOTE_HIGH);
+  assert.throws(() => daw.loadSong('{"hello":1}'), /not a PRISM song/);
+});
+check('swing pushes every second sixteenth; positions read bar:beat:step', () => {
+  assert.equal(daw.swingOffset(1, 0.5), 0.25); assert.equal(daw.swingOffset(2, 0.5), 0); assert.equal(daw.swingOffset(1.5, 0.5), 0);
+  assert.equal(daw.formatPosition(0), '1:1:1'); assert.equal(daw.formatPosition(21), '2:2:2');
+});
+check('MIDI files: what goes out comes back — notes, lengths, velocities, tempo, drums on channel 10', () => {
+  const tracks = [
+    { name: 'Keys', channel: 0, notes: [{ start: 0, length: 4, midi: 60, velocity: 1 }, { start: 4, length: 2.5, midi: 64, velocity: 0.5 }, { start: 4, length: 2, midi: 67, velocity: 0.5 }] },
+    { name: 'Kick', channel: 9, notes: [{ start: 0, length: 1, midi: 36, velocity: 0.8 }, { start: 8, length: 1, midi: 36, velocity: 0.8 }] }
+  ];
+  const bytes = mf.encodeMidi({ name: 'Test', bpm: 140, tracks });
+  assert.equal(new TextDecoder().decode(bytes.subarray(0, 4)), 'MThd');
+  const back = mf.decodeMidi(bytes);
+  assert.ok(Math.abs(back.bpm - 140) < 0.01);
+  assert.deepEqual(back.tracks.map((t) => [t.name, t.channel]), [['Keys', 0], ['Kick', 9]]);
+  const keys = back.tracks[0].notes;
+  assert.deepEqual(keys.map((n) => [n.start, n.length, n.midi]), [[0, 4, 60], [4, 2.5, 64], [4, 2, 67]]); // same start: lowest first
+  assert.ok(Math.abs(keys[1].velocity - 64 / 127) < 1e-9);
+  assert.throws(() => mf.decodeMidi(new Uint8Array([1, 2, 3])), /not a MIDI file/);
+});
+check('MIDI files from elsewhere: running status, note-on velocity 0 as off, type 0 split by channel', () => {
+  // Type 0, ppq 480: tempo 100, then C on ch1 and a kick on ch10 using running status and vel-0 offs.
+  const ev = [0x00, 0xff, 0x51, 0x03, 0x09, 0x27, 0xc0, 0x00, 0x90, 60, 100, 0x00, 0x99, 36, 90,
+    0x83, 0x60, 0x89, 36, 0, 0x00, 0x90, 60, 0, 0x00, 0xff, 0x2f, 0x00];
+  const len = ev.length;
+  const file = new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xe0, 0x4d, 0x54, 0x72, 0x6b, 0, 0, 0, len, ...ev]);
+  const r = mf.decodeMidi(file);
+  assert.ok(Math.abs(r.bpm - 100) < 0.01);
+  assert.deepEqual(r.tracks.map((t) => [t.channel, t.notes[0].midi, t.notes[0].start, t.notes[0].length]), [[0, 60, 0, 4], [9, 36, 0, 4]]);
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

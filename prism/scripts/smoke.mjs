@@ -101,11 +101,67 @@ async function drive() {
     };
     const loopState = () => evaluate("document.getElementById('loopBtn').dataset.state");
 
-    // The Studio is the front page.
-    const studio = await waitFor("document.readyState === 'complete' && location.href.endsWith('/studio.html') && document.title");
-    check(studio === 'PRISM — Studio', 'opens on the Studio, from the bundled archive', await evaluate('location.href'));
+    const click = async (x, y, button = 'left') => {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'left' ? 1 : 2, clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, buttons: 0, clickCount: 1 });
+    };
+    const centre = (sel) => evaluate(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const songState = (expr) => `(() => { const s = JSON.parse(localStorage.getItem('prism.daw.song.v1') || 'null'); if (!s) return false; const p = s.patterns.find((x) => x.id === s.current.pattern); return ${expr}; })()`;
+
+    // The beatmaker (Studio) is the front page.
+    const daw = await waitFor("document.readyState === 'complete' && location.href.endsWith('/daw.html') && document.title");
+    check(daw === 'PRISM — Studio', 'opens on the Studio beatmaker, from the bundled archive', await evaluate('location.href'));
     check((await evaluate('typeof require + typeof process')) === 'undefinedundefined', 'page has no Node access');
-    check((await waitFor("document.querySelectorAll('.key').length")) === 18, 'studio keys built');
+    // Start from a fresh song: the app remembers the last session, and earlier runs leave one.
+    await evaluate(`localStorage.removeItem('prism.daw.song.v1'), localStorage.removeItem('prism.daw.ui.v1'), location.reload(), true`);
+    await sleep(500);
+    await waitFor("document.readyState === 'complete' && document.querySelector('.ch-row') && true");
+    check((await waitFor("document.querySelectorAll('.ch-row').length")) === 6, 'channel rack built: kick, clap, hat, snare, 808, pluck');
+    check((await waitFor("document.getElementById('startVeil').hidden && 'running'", 8000)) === 'running', 'audio starts without a click');
+    let at = await centre('.ch-row:nth-child(1) .step[data-step="0"]');
+    await click(at.x, at.y);
+    check((await waitFor(songState(`(p.notes[s.channels[0].id] || []).length`), 5000)) === 1, 'clicking a step puts a kick on it');
+    await evaluate(`[...document.querySelectorAll('.br-name')].find((b) => b.textContent === 'Trap').click(), true`);
+    const moving = await waitFor(`(() => { const t = document.getElementById('timeDisplay').textContent; return document.getElementById('playBtn').getAttribute('aria-label') === 'Stop' && t !== '1:1:1' && t; })()`, 8000);
+    check(!!moving, 'a beat from the browser plays, and the transport moves', String(moving));
+    await key('F9', 'F9', 120);
+    const lit = await waitFor(`(() => { const c = document.querySelector('.mx-meter'); if (!c || !c.width) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++; return n > c.width * 4 && n; })()`, 8000);
+    check(!!lit, 'the mixer meters move with the beat', `${lit} lit pixels on the master meter`);
+    await key('Space', ' ', 32);
+    check((await waitFor(`document.getElementById('playBtn').getAttribute('aria-label') === 'Play' && 'stopped'`, 5000)) === 'stopped', 'Space stops');
+    await key('F7', 'F7', 118);
+    await sleep(300);
+    const before = await evaluate(songState(`(p.notes[s.current.channel] || []).length`));
+    at = await centre('#rollCanvas');
+    await click(at.x, at.y);
+    const after = await waitFor(songState(`(p.notes[s.current.channel] || []).length > ${before} && (p.notes[s.current.channel] || []).length`), 5000);
+    check(after === before + 1, 'a click in the piano roll draws a note', `${before} -> ${after}`);
+    await key('KeyZ', 'z', 90, 2); // Ctrl+Z
+    const undone = await waitFor(songState(`(p.notes[s.current.channel] || []).length === ${before} && 'undone'`), 5000);
+    check(undone === 'undone', 'Ctrl+Z takes the note back (no menu accelerator steals it)');
+    await key('KeyS', 's', 83, 2); // Ctrl+S
+    const savedSong = await waitFor(`(() => { const t = document.getElementById('songsNote').textContent; return t.startsWith('Saved') && t; })()`, 8000);
+    check(String(savedSong).startsWith('Saved'), 'Ctrl+S saves the song (IndexedDB on prism://)', String(savedSong));
+    await evaluate(`document.getElementById('songsClose').click(), true`);
+    const rendered = await evaluate(`(async () => {
+      const { newSong } = await import('./js/daw/model.js');
+      const { DawEngine } = await import('./js/daw/engine.js');
+      const s = newSong(); s.applyBeat(s.currentPattern.id, 'groove');
+      const e = new DawEngine(s);
+      const buf = await e.render('pattern', { tail: 0.5 });
+      const d = buf.getChannelData(0); let sum = 0; for (const v of d) sum += v * v;
+      return Math.sqrt(sum / d.length).toFixed(4) + ' rms over ' + (buf.length / buf.sampleRate).toFixed(2) + ' s';
+    })()`);
+    check(parseFloat(rendered) > 0.01, 'export renders the beat offline (WAV)', String(rendered));
+    const dawShot = await send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(SHOT.replace(/\.png$/, '-daw.png'), Buffer.from(dawShot.result.data, 'base64'));
+
+    // The live looper is the Live page now.
+    await evaluate(`document.querySelector('a.page[href="./studio.html"]').click()`);
+    const studio = await waitFor("location.href.endsWith('/studio.html') && document.readyState === 'complete' && document.getElementById('loopBtn') && document.title");
+    check(studio === 'PRISM — Live', 'the Live page (looper and circles) loads', String(studio));
+    check((await waitFor("document.querySelectorAll('.key').length")) === 18, 'live page keys built');
     const veil = await waitFor("document.getElementById('startVeil').hidden && 'running'", 8000);
     check(veil === 'running', 'audio starts without a click');
     // CI machines have no microphone: the page must say so, not break.
@@ -137,17 +193,15 @@ async function drive() {
     // Piano roll: open it, draw a note with the mouse, close it.
     await key('KeyN', 'n', 78);
     check((await waitFor(`!document.getElementById('roll').hidden && 'open'`, 5000)) === 'open', 'N opens the piano roll');
-    const at = await evaluate(`(() => { const r = document.getElementById('rollCanvas').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
     await sleep(300);
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y });
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', buttons: 1, clickCount: 1 });
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', buttons: 0, clickCount: 1 });
+    const rollAt = await centre('#rollCanvas');
+    await click(rollAt.x, rollAt.y);
     const rollNotes = await waitFor(`(() => { const n = JSON.parse(localStorage.getItem('prism.studio.v1') || '{}').roll?.pattern?.notes?.length; return n > 0 && n; })()`, 5000);
     check(rollNotes >= 1, 'a click draws a note in the roll', `${rollNotes} note(s)`);
     await key('KeyN', 'n', 78);
     await evaluate(`document.querySelector('[data-beat=""]').click(), true`);
     const studioShot = await send('Page.captureScreenshot', { format: 'png' });
-    writeFileSync(SHOT.replace(/\.png$/, '-studio.png'), Buffer.from(studioShot.result.data, 'base64'));
+    writeFileSync(SHOT.replace(/\.png$/, '-live.png'), Buffer.from(studioShot.result.data, 'base64'));
 
     await evaluate(`document.querySelector('a.page[href="./index.html"]').click()`);
     const loaded = await waitFor("location.href.endsWith('/index.html') && document.readyState === 'complete' && document.title");

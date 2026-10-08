@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, protocol, net, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const url = require('node:url');
 const { isAppUrl, resolveRequest, permitted, isExternalAllowed } = require('./security.js');
@@ -64,8 +64,8 @@ function createWindow() {
       navigateOnDragDrop: false,
       spellcheck: false,
       backgroundThrottling: false,
-      // The Studio starts listening and playing as it opens; there is no page to
-      // "click first" in a desktop instrument.
+      // The Studio (and the Live page) make sound as they open; there is no page
+      // to "click first" in a desktop instrument.
       autoplayPolicy: 'no-user-gesture-required'
     }
   });
@@ -85,7 +85,7 @@ function createWindow() {
   win.on('enter-full-screen', () => win.webContents.send('window:fullscreen', true));
   win.on('leave-full-screen', () => win.webContents.send('window:fullscreen', false));
 
-  win.loadURL('prism://app/studio.html');
+  win.loadURL('prism://app/daw.html');
   return win;
 }
 
@@ -124,6 +124,12 @@ app.on('web-contents-created', (_e, contents) => {
 });
 
 app.whenReady().then(() => {
+  // The window is frameless, so Electron's default menu is never seen on Windows or
+  // Linux, but its shortcuts still fire: Ctrl+R reloads the page mid-song, Ctrl+Z and
+  // Ctrl+A go to text editing, Ctrl+± zooms. The instrument owns its keys there.
+  // macOS keeps its menu: Cmd+C / Cmd+V in text fields depend on it.
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+
   protocol.handle('prism', async (request) => {
     if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
     const target = resolveRequest(request.url, ROOT);
