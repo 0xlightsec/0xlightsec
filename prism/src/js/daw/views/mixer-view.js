@@ -2,11 +2,11 @@
  * Mixer: the master and the inserts, side by side, FL style. Each strip has a
  * fader, pan, mute and solo, a meter, and lists the channels playing into it.
  * Click a strip to edit its effects on the right: Drive, Crush, Filter, Echo,
- * Space and Tape.
+ * Space, Tape, Clip and Gate, or start from one of the presets.
  */
 
 import { Knob } from '../../studio/knob.js';
-import { crushBits, filterSetting, levelGain } from '../../studio/fx.js';
+import { crushBits, filterSetting, levelGain, clipGain, FX_DEFAULTS } from '../../studio/fx.js';
 import { INSERTS } from '../model.js';
 
 const FX = [
@@ -15,8 +15,25 @@ const FX = [
   ['filter', 'Filter', 196, formatFilter, 0.5, true],
   ['echo', 'Echo', 160, (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`)],
   ['space', 'Space', 255, (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`)],
-  ['tape', 'Tape', 28, (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`)]
+  ['tape', 'Tape', 28, (v) => (v < 0.005 ? 'off' : `${Math.round(v * 100)}%`)],
+  ['clip', 'Clip', 8, (v) => (v < 0.005 ? 'off' : `+${(20 * Math.log10(clipGain(v))).toFixed(1)} dB`)],
+  ['gate', 'Gate', 120, (v) => (v < 0.005 ? 'off' : `1/16 · ${Math.round(v * 100)}%`)]
 ];
+
+/** One-click starting points: a whole effects setting each. */
+export const FX_PRESETS = [
+  { id: 'clean', label: 'Clean', title: 'Every effect off', fx: {} },
+  { id: 'loud808', label: 'Loud 808', title: 'Drive and a hard clip: the Spinz-style 808 that cuts through', fx: { drive: 0.15, clip: 0.4 } },
+  { id: 'chop', label: 'Chop', title: 'A 1/16 gate chopping the sound, ShaperBox style', fx: { gate: 0.85, space: 0.15 } },
+  { id: 'dusty', label: 'Dusty', title: 'Bit-crushed, worn tape, dark', fx: { crush: 0.3, tape: 0.45, filter: 0.38 } },
+  { id: 'wide', label: 'Big room', title: 'Echo and a lot of hall', fx: { echo: 0.35, space: 0.6 } },
+  { id: 'phone', label: 'Phone', title: 'Thin and crunchy, for a breakdown', fx: { filter: 0.78, drive: 0.4, crush: 0.15 } }
+];
+
+const PRESET_BASE = (() => {
+  const { level, mute, ...sound } = FX_DEFAULTS;
+  return { ...sound, space: 0 };
+})();
 
 function formatFilter(v) {
   if (Math.abs(v - 0.5) < 0.04) return 'off';
@@ -146,7 +163,15 @@ export class MixerView {
       new Knob(d, { label, value: t.fx[k], def, bipolar, hue, format, onChange: (v) => this.studio.tweak(() => (t.fx[k] = v)) });
     }
     box.appendChild(knobs);
-    box.appendChild(el('p', 'mx-fx-note', 'Double-click a knob to reset it. Space is a shared hall: every strip sends to it.'));
+    const presets = el('div', 'mx-presets');
+    for (const p of FX_PRESETS) {
+      const b = el('button', 'pill', p.label);
+      b.title = p.title;
+      b.addEventListener('click', () => this.studio.edit(() => Object.assign(t.fx, PRESET_BASE, p.fx)));
+      presets.appendChild(b);
+    }
+    box.appendChild(presets);
+    box.appendChild(el('p', 'mx-fx-note', 'Double-click a knob to reset it. Space is a shared hall: every strip sends to it. Gate chops in time with the song while it plays.'));
   }
 
   /** Meters, every frame: fast up, slower down, with a peak hold. */

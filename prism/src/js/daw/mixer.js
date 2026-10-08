@@ -2,8 +2,8 @@
  * The mixer: a master strip and inserts, FL style. Every channel plays into an
  * insert (or straight into the master); every insert plays into the master.
  *
- *   insert ─▶ Drive ─▶ Crush ─▶ Filter ─▶ Tape ─▶ fader ─▶ pan ─▶ master
- *                                                 └─▶ Echo, and a send to the shared reverb
+ *   insert ─▶ Drive ─▶ Crush ─▶ Filter ─▶ Tape ─▶ Clip ─▶ Gate ─▶ fader ─▶ pan ─▶ master
+ *                                                                 └─▶ Echo, and a send to the shared reverb
  *
  * The reverb is shared (convolution is the expensive effect) and comes back in
  * after the master's own effects, so even the master can send to it without
@@ -58,6 +58,11 @@ export class Mixer {
     this.inserts = Array.from({ length: INSERTS }, () => new Strip(ctx, this.space, this.master.input));
   }
 
+  /** Every strip, the master first. */
+  get strips() {
+    return [this.master, ...this.inserts];
+  }
+
   strip(i) {
     return i === 0 ? this.master : this.inserts[i - 1] ?? this.master;
   }
@@ -75,10 +80,20 @@ export class Mixer {
   }
 
   setTempo(bpm) {
-    for (const s of [this.master, ...this.inserts]) s.fx.setTempo(bpm);
+    for (const s of this.strips) s.fx.setTempo(bpm);
+  }
+
+  /** Book the gates of the strips that use one, for a step at `at` lasting `duration`. */
+  gateStep(at, duration) {
+    for (const s of this.strips) s.fx.gateStep(at, duration);
+  }
+
+  /** Open every gate (the transport stopped). */
+  gateOpen() {
+    for (const s of this.strips) if (s.fx.values.gate >= 0.001) s.fx.gateOpen();
   }
 
   peaks() {
-    return [this.master, ...this.inserts].map((s) => s.peak());
+    return this.strips.map((s) => s.peak());
   }
 }

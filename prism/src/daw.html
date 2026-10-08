@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="./daw.css" />
 </head>
 <body>
+<canvas class="void" id="voidCanvas" aria-hidden="true"></canvas>
 <div class="app daw-app" id="app">
 
   <header class="titlebar">
@@ -58,12 +59,11 @@
       <button class="tp-mini" id="clonePattern" title="Clone this pattern" aria-label="Clone pattern">⧉</button>
       <button class="tp-mini" id="deletePattern" title="Delete this pattern (click twice)" aria-label="Delete pattern">✕</button>
     </div>
-    <nav class="view-tabs" id="viewTabs" aria-label="Windows">
-      <button data-view="playlist" title="Playlist (F5)">Playlist</button>
-      <button data-view="rack" title="Channel Rack (F6)"><span class="long">Channel </span>Rack</button>
-      <button data-view="roll" title="Piano Roll (F7)">Piano Roll</button>
-      <button data-view="mixer" title="Mixer (F9)">Mixer</button>
-    </nav>
+    <div class="make" aria-label="Make a beat">
+      <button class="make-btn" id="cynmixxBtn" title="Make a whole Cynmixx-type hoodtrap beat: drums, 808, arp, lead, arranged and mixed (Ctrl+click: keep the tempo)">⚡ Cynmixx</button>
+      <button class="tp-mini make-roll" id="newMelodyBtn" title="New melody: rewrite the 808, arp, lead and brass/strings, keep the drums (N)">♪ Melody</button>
+      <button class="tp-mini make-roll" id="newDrumsBtn" title="New drums: rewrite the drums, keep the melody">◈ Drums</button>
+    </div>
     <span class="spacer"></span>
     <button class="tp-mini" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
     <button class="tp-mini" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
@@ -83,8 +83,13 @@
   </section>
 
   <main class="workspace" id="workspace">
-    <aside class="browser" id="browser" aria-label="Browser">
-      <div class="browser-title"><span>Browser</span><small>F8</small></div>
+    <aside class="browser window" id="browser" aria-label="Browser">
+      <header class="win-head">
+        <span class="win-title"><i class="win-led"></i>Browser</span>
+        <span class="spacer"></span>
+        <kbd>F8</kbd>
+        <button class="win-x" data-view="browser" title="Hide the browser (F8)" aria-label="Hide the browser">—</button>
+      </header>
       <div class="browser-list" id="browserList"></div>
       <div class="viz" title="The beat as light: the left circle follows the melody, the right one the drums">
         <canvas id="vizGrid"></canvas>
@@ -93,12 +98,37 @@
     </aside>
 
     <div class="panes">
-      <section class="pane playlist-pane" id="playlistPane" aria-label="Playlist">
-        <canvas id="playlistCanvas"></canvas>
-        <div class="pane-hint" id="playlistHint">Click to place the current pattern · drag to move · drag the end to stretch · right-click deletes</div>
+      <section class="pane window playlist-pane" id="playlistPane" aria-label="Playlist">
+        <header class="win-head">
+          <span class="win-title"><i class="win-led"></i>Playlist</span>
+          <span class="win-meta" id="playlistMeta"></span>
+          <span class="spacer"></span>
+          <kbd>F5</kbd>
+          <button class="win-x" data-view="playlist" title="Hide the playlist (F5)" aria-label="Hide the playlist">—</button>
+        </header>
+        <div class="win-body">
+          <canvas id="playlistCanvas"></canvas>
+          <div class="pane-hint" id="playlistHint">Click to place the current pattern · drag to move · drag the end to stretch · right-click deletes</div>
+          <div class="empty-cta" id="emptyCta" hidden>
+            <button class="make-btn big" id="ctaCynmixx">⚡ Make a Cynmixx beat</button>
+            <span>One click: hoodtrap drums with the bounce, a clipped 808, a dirty arp and a gliding lead, arranged into Intro · Hook · Verse · Breakdown. Then re-roll the melody or drums until it slaps.</span>
+          </div>
+        </div>
       </section>
 
-      <section class="pane main-pane" id="mainPane">
+      <section class="pane window main-pane" id="mainPane">
+        <header class="win-head">
+          <nav class="view-tabs" id="viewTabs" aria-label="Windows">
+            <button data-view="rack" title="Channel Rack (F6)"><span class="long">Channel </span>Rack <kbd>F6</kbd></button>
+            <button data-view="roll" title="Piano Roll (F7)">Piano Roll <kbd>F7</kbd></button>
+            <button data-view="mixer" title="Mixer (F9)">Mixer <kbd>F9</kbd></button>
+          </nav>
+          <span class="win-meta" id="mainMeta"></span>
+          <span class="spacer"></span>
+          <button class="win-toggle" data-view="playlist" title="Show or hide the playlist (F5)">Playlist <kbd>F5</kbd></button>
+          <button class="win-toggle" data-view="browser" title="Show or hide the browser (F8)">Browser <kbd>F8</kbd></button>
+        </header>
+        <div class="win-body">
         <div class="view rack-view" id="rackView">
           <header class="rack-head"></header>
           <div class="rack-body">
@@ -111,7 +141,7 @@
           <header class="roll-head">
             <select id="rollChannel" aria-label="Channel"></select>
             <div class="seg roll-seg" id="rollSnap" aria-label="Snap"></div>
-            <label class="roll-key"><span class="ctl-label">Key</span><select id="rollKey" aria-label="Key"></select></label>
+            <label class="roll-key"><span class="ctl-label">Key</span><select id="rollKey" aria-label="Key"></select><select id="rollScale" aria-label="Scale"></select></label>
             <button class="toggle" id="rollChords" aria-pressed="false" title="Draw and play whole chords in the key (C)">Chords</button>
             <button class="toggle" id="rollGhosts" aria-pressed="true" title="Show other channels' notes faintly">Ghosts</button>
             <button class="toggle" id="recQuantize" aria-pressed="true" title="Snap recorded notes to the grid">Rec snap</button>
@@ -126,6 +156,7 @@
           <div class="mx-strips"></div>
           <aside class="mx-fx"></aside>
         </div>
+        </div>
       </section>
     </div>
   </main>
@@ -137,6 +168,12 @@
       <div class="key-ctl-row"><span class="ctl-label">Plays</span><span class="plays" id="playsName">—</span></div>
     </div>
     <div class="keybed" id="keybed"></div>
+    <div class="pads" aria-label="Performance pads: hold them">
+      <span class="ctl-label">Pads · hold</span>
+      <button class="pad" data-pad="stutter2" title="Hold: repeat the last eighth, in time (Q)">Stutter ⅛ <kbd>Q</kbd></button>
+      <button class="pad" data-pad="stutter1" title="Hold: repeat the last sixteenth, in time (B)">Stutter <small>1/16</small> <kbd>B</kbd></button>
+      <button class="pad" data-pad="tape" title="Hold: the whole mix winds down like a turntable losing power (V)">Tape stop <kbd>V</kbd></button>
+    </div>
     <button class="breakaway" id="breakawayKey" data-state="captured">
       <span class="breakaway-title" id="breakawayTitle">Breakaway</span>
       <span class="breakaway-sub" id="breakawaySub">release keyboard</span>

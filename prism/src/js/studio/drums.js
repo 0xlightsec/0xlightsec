@@ -19,8 +19,12 @@ export const KITS = {
   hyper:   { kick: { from: 190, to: 45, length: 0.7, drive: 0.6 }, snare: { body: 230, bright: 2200, length: 0.17, level: 0.6 }, hat: { cut: 9000, length: 0.035, level: 0.24 }, clap: { level: 0.55 } },
   rage:    { kick: { from: 130, to: 38, length: 1.15, drive: 0.55 }, snare: { body: 210, bright: 1800, length: 0.18, level: 0.55 }, hat: { cut: 8500, length: 0.04, level: 0.22 }, clap: { level: 0.5 } },
   club:    { kick: { from: 160, to: 50, length: 0.38 }, snare: { body: 220, bright: 1600, length: 0.15, level: 0.45 }, hat: { cut: 8000, length: 0.04, level: 0.2 }, clap: { level: 0.6 } },
-  rock:    { kick: { from: 110, to: 55, length: 0.3, level: 1 }, snare: { body: 180, bright: 800, length: 0.3, level: 0.75 }, hat: { cut: 6000, length: 0.09, level: 0.16 }, crash: { length: 1.4, level: 0.22 } }
+  rock:    { kick: { from: 110, to: 55, length: 0.3, level: 1 }, snare: { body: 180, bright: 800, length: 0.3, level: 0.75 }, hat: { cut: 6000, length: 0.09, level: 0.16 }, crash: { length: 1.4, level: 0.22 } },
+  // Hoodtrap: a tight, cracking snare up front, a short punchy kick (the 808 does the low end), crisp hats.
+  hood:    { kick: { from: 175, to: 52, length: 0.28, drive: 0.4 }, snare: { body: 245, bright: 2600, length: 0.13, level: 0.68 }, hat: { cut: 9500, length: 0.03, level: 0.2 }, clap: { level: 0.62 }, crash: { length: 1.6, level: 0.2 } }
 };
+
+export const KIT_LABELS = { classic: 'Classic', boom: 'Boom (trap)', lofi: 'Lo-fi', hyper: 'Hyper', rage: 'Rage', club: 'Club', rock: 'Rock', hood: 'Hood (hoodtrap)' };
 
 export const BEATS = {
   pulse: {
@@ -80,6 +84,15 @@ export const BEATS = {
     snare: '....x.......x...',
     hat:   'x.x.x.x.x.x.x.x.',
     crash: pad('x'),
+    swing: 0
+  },
+  // The hoodtrap bounce: snare on 1, the "and" of 2 and 4 in bar one, the last two only in bar two.
+  hoodtrap: {
+    label: 'Hoodtrap', tempo: 148, kit: 'hood',
+    kick:  'x.....x.....x.........x.....x...',
+    snare: 'x.....x.....x.........x.....x...',
+    clap:  '....x.......x.......x.......x...',
+    hat:   'x.x.x.x.x.x.x.xrx.x.x.x.x.xrx.xx',
     swing: 0
   },
   grunge: {

@@ -36,7 +36,7 @@ export class PianoRoll {
   /**
    * @param {HTMLCanvasElement} canvas
    * @param {object} studio  the app: song, begin(), change(), commit(), preview(), …
-   * @param {object} opts    { snap(), key(), chords(), chordFor(midi), ghosts() }
+   * @param {object} opts    { snap(), inKey(midi) or key(), chords(), chordFor(midi), ghosts() }
    */
   constructor(canvas, studio, opts) {
     this.canvas = canvas;
@@ -148,6 +148,7 @@ export class PianoRoll {
   /* --------------------------------- drawing --------------------------------- */
 
   inKey(midi) {
+    if (this.opts.inKey) return this.opts.inKey(midi);
     return MAJOR.includes((((midi - this.opts.key()) % 12) + 12) % 12);
   }
 
@@ -169,10 +170,10 @@ export class PianoRoll {
       const y = this.yOf(m);
       if (y > RULER_H + this.gridH || y + ROW_H < RULER_H) continue;
       const pc = pitchClass(m);
-      g.fillStyle = this.inKey(m) ? (BLACK.has(pc) ? '#1d0b1a' : '#24101f') : BLACK.has(pc) ? '#0f050d' : '#150813';
+      g.fillStyle = this.inKey(m) ? (BLACK.has(pc) ? '#0f1b2b' : '#132336') : BLACK.has(pc) ? '#070c14' : '#0a111b';
       g.fillRect(KEYS_W, y, this.gridW, ROW_H);
       if (pc === 0) {
-        g.fillStyle = 'rgba(255, 160, 230, 0.16)';
+        g.fillStyle = 'rgba(90, 220, 255, 0.18)';
         g.fillRect(KEYS_W, y + ROW_H - 1, this.gridW, 1);
       }
     }
@@ -181,13 +182,13 @@ export class PianoRoll {
     for (let s = first; s <= Math.min(steps, this.view.from + this.shown + 1); s++) {
       if (sw < 5 && s % 4) continue;
       const x = Math.round(this.xOf(s)) + 0.5;
-      g.fillStyle = s % STEPS_PER_BAR === 0 ? 'rgba(255, 200, 240, 0.32)' : s % 4 === 0 ? 'rgba(255, 200, 240, 0.13)' : 'rgba(255, 200, 240, 0.045)';
+      g.fillStyle = s % STEPS_PER_BAR === 0 ? 'rgba(140, 220, 255, 0.32)' : s % 4 === 0 ? 'rgba(140, 220, 255, 0.13)' : 'rgba(140, 220, 255, 0.045)';
       g.fillRect(x - 0.5, RULER_H, 1, this.gridH);
     }
 
     // Ghost notes: the pattern's other channels, faint.
     if (this.opts.ghosts() && this.pattern) {
-      g.fillStyle = 'rgba(255, 220, 245, 0.07)';
+      g.fillStyle = 'rgba(190, 236, 255, 0.07)';
       for (const [cid, list] of Object.entries(this.pattern.notes)) {
         if (cid === this.channel?.id) continue;
         for (const n of list) {
@@ -216,7 +217,7 @@ export class PianoRoll {
       g.fillStyle = 'rgba(0, 0, 0, 0.28)';
       g.fillRect(x + nw - 3, y + 3, 1.5, ROW_H - 6);
       if (nw > 26) {
-        g.fillStyle = 'rgba(20, 0, 16, 0.85)';
+        g.fillStyle = 'rgba(2, 8, 16, 0.85)';
         g.font = '9px ui-monospace, Menlo, Consolas, monospace';
         g.textBaseline = 'middle';
         g.fillText(noteName(n.midi), x + 4, y + ROW_H / 2 + 0.5);
@@ -226,8 +227,8 @@ export class PianoRoll {
     // Box selection.
     if (this.drag?.mode === 'box') {
       const { x0, y0, x1, y1 } = this.drag;
-      g.fillStyle = 'rgba(255, 95, 210, 0.12)';
-      g.strokeStyle = 'rgba(255, 140, 220, 0.8)';
+      g.fillStyle = 'rgba(63, 230, 255, 0.1)';
+      g.strokeStyle = 'rgba(120, 236, 255, 0.85)';
       g.lineWidth = 1;
       g.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
       g.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0));
@@ -251,7 +252,7 @@ export class PianoRoll {
     g.beginPath();
     g.rect(0, RULER_H, KEYS_W, this.gridH);
     g.clip();
-    g.fillStyle = '#0c0410';
+    g.fillStyle = '#050a11';
     g.fillRect(0, RULER_H, KEYS_W, this.gridH);
     for (let m = NOTE_LOW; m <= NOTE_HIGH; m++) {
       const y = this.yOf(m);
@@ -273,7 +274,7 @@ export class PianoRoll {
 
   drawRuler(playhead) {
     const g = this.g;
-    g.fillStyle = '#12050f';
+    g.fillStyle = '#060b13';
     g.fillRect(0, 0, this.w, RULER_H);
     g.font = '10px ui-monospace, Menlo, Consolas, monospace';
     g.textBaseline = 'middle';
@@ -281,9 +282,9 @@ export class PianoRoll {
     for (let bar = 0; bar < bars; bar++) {
       const x = this.xOf(bar * STEPS_PER_BAR);
       if (x < KEYS_W - 1 || x > this.w) continue;
-      g.fillStyle = 'rgba(255, 200, 240, 0.35)';
+      g.fillStyle = 'rgba(140, 220, 255, 0.35)';
       g.fillRect(Math.round(x), 0, 1, RULER_H);
-      g.fillStyle = 'rgba(255, 220, 245, 0.7)';
+      g.fillStyle = 'rgba(190, 236, 255, 0.7)';
       g.fillText(String(bar + 1), x + 5, RULER_H / 2);
     }
     if (playhead !== null && playhead !== undefined) {
@@ -296,9 +297,9 @@ export class PianoRoll {
       g.closePath();
       g.fill();
     }
-    g.fillStyle = '#12050f';
+    g.fillStyle = '#060b13';
     g.fillRect(0, 0, KEYS_W, RULER_H);
-    g.fillStyle = 'rgba(255, 220, 245, 0.5)';
+    g.fillStyle = 'rgba(190, 236, 255, 0.5)';
     g.font = '9px ui-monospace, Menlo, Consolas, monospace';
     g.fillText(this.channel ? this.channel.name.slice(0, 8) : '', 6, RULER_H / 2);
   }
@@ -306,11 +307,11 @@ export class PianoRoll {
   drawVelocity() {
     const g = this.g;
     const top = this.h - VEL_H;
-    g.fillStyle = '#0d040b';
+    g.fillStyle = '#050a11';
     g.fillRect(0, top, this.w, VEL_H);
-    g.fillStyle = 'rgba(255, 200, 240, 0.12)';
+    g.fillStyle = 'rgba(140, 220, 255, 0.12)';
     g.fillRect(0, top, this.w, 1);
-    g.fillStyle = 'rgba(255, 220, 245, 0.4)';
+    g.fillStyle = 'rgba(190, 236, 255, 0.4)';
     g.font = '9px ui-monospace, Menlo, Consolas, monospace';
     g.textBaseline = 'middle';
     g.fillText('VEL', 8, top + VEL_H / 2);

@@ -11,6 +11,10 @@
  * MIDI drum pads (channel 10 goes to the drum channels). Arm record and what you
  * play lands in the pattern. Export WAV or MIDI; import MIDI.
  *
+ * ⚡ Cynmixx makes a whole arranged hoodtrap beat in one click; ♪ Melody and
+ * ◈ Drums re-roll its parts. The windows float over a live data-center backdrop
+ * that pulses with the drums.
+ *
  * Every edit goes through the studio object below, which keeps undo, the audio
  * engine and the views in step.
  */
@@ -23,8 +27,10 @@ import { PianoRoll } from './views/piano-roll.js';
 import { Playlist } from './views/playlist.js';
 import { MixerView } from './views/mixer-view.js';
 import { Browser } from './views/browser.js';
+import { DataCenter } from './views/datacenter.js';
+import { makeCynmixx, applyMelody, applyDrums, isGenerated } from './cynmixx.js';
 import { saveSong, listSongs, loadSongData, deleteSong } from './songs-db.js';
-import { SOUNDS, KEY_NAMES, chordFor, chordName } from '../studio/sounds.js';
+import { KEY_NAMES, SCALES, chordFor, chordName, inScale } from '../studio/sounds.js';
 import { BEATS } from '../studio/drums.js';
 import { KeyboardInstrument, WHITE_KEYS, BLACK_KEYS } from '../io/keyboard.js';
 import { MidiInput } from '../io/midi.js';
@@ -50,6 +56,7 @@ const ui = {
   browser: true,
   snap: 1,
   key: 0,
+  scale: 'major',
   chords: false,
   ghosts: true,
   recQuantize: true,
@@ -202,9 +209,9 @@ const studio = {
 const rack = new ChannelRack($('rackView'), studio);
 const roll = new PianoRoll($('rollCanvas'), studio, {
   snap: () => ui.snap,
-  key: () => ui.key,
+  inKey: (midi) => inScale(midi, ui.key, ui.scale),
   chords: () => ui.chords,
-  chordFor: (midi) => chordFor(midi, ui.key),
+  chordFor: (midi) => chordFor(midi, ui.key, ui.scale),
   ghosts: () => ui.ghosts
 });
 const playlist = new Playlist($('playlistCanvas'), studio);
@@ -212,6 +219,7 @@ const mixer = new MixerView($('mixerView'), studio);
 const browser = new Browser($('browserList'), studio);
 
 function showView(view) {
+  if (view === 'browser') return toggleBrowser();
   if (view === 'playlist') {
     ui.playlist = !ui.playlist;
   } else if (VIEWS.includes(view)) {
@@ -229,10 +237,8 @@ function layout() {
   $('rackView').hidden = ui.view !== 'rack';
   $('rollView').hidden = ui.view !== 'roll';
   $('mixerView').hidden = ui.view !== 'mixer';
-  for (const b of $('viewTabs').children) {
-    const v = b.dataset.view;
-    b.classList.toggle('is-on', v === 'playlist' ? ui.playlist : v === ui.view);
-  }
+  for (const b of $('viewTabs').children) b.classList.toggle('is-on', b.dataset.view === ui.view);
+  for (const b of document.querySelectorAll('.win-toggle')) b.classList.toggle('is-on', b.dataset.view === 'playlist' ? ui.playlist : ui.browser);
 }
 
 function renderAll() {
@@ -261,7 +267,18 @@ function renderToolbar() {
   $('undoBtn').disabled = !song.past.length;
   $('redoBtn').disabled = !song.future.length;
   $('songTitle').textContent = song.data.name;
-  $('playlistHint').classList.toggle('is-hidden', song.data.playlist.clips.length > 0);
+  const clips = song.data.playlist.clips.length;
+  const empty = !clips && song.patterns.every((p) => Object.values(p.notes).every((l) => !l.length));
+  $('emptyCta').hidden = !empty;
+  $('playlistHint').classList.toggle('is-hidden', clips > 0 || empty);
+  $('playlistMeta').textContent = `${song.songSteps / STEPS_PER_BAR} bars · ${clips} clip${clips === 1 ? '' : 's'} · ${song.patterns.length} pattern${song.patterns.length === 1 ? '' : 's'}`;
+  const generated = isGenerated(song);
+  $('newMelodyBtn').disabled = !generated;
+  $('newDrumsBtn').disabled = !generated;
+  const ch = song.currentChannel;
+  $('mainMeta').textContent = ui.view === 'roll' ? `${ch?.name ?? ''} · ${song.currentPattern?.name ?? ''}`
+    : ui.view === 'mixer' ? `${song.channels.length} channels → ${song.data.mixer.length - 1} inserts`
+      : `${song.currentPattern?.name ?? ''} · ${song.channels.length} channels`;
 }
 
 function renderRollHead() {
@@ -276,6 +293,7 @@ function renderRollHead() {
   sel.value = song.data.current.channel ?? '';
   for (const b of $('rollSnap').children) b.classList.toggle('is-on', Number(b.dataset.snap) === ui.snap);
   $('rollKey').value = String(ui.key);
+  $('rollScale').value = ui.scale;
   $('rollChords').setAttribute('aria-pressed', String(ui.chords));
   $('chordBtn').setAttribute('aria-pressed', String(ui.chords));
   $('rollGhosts').setAttribute('aria-pressed', String(ui.ghosts));
@@ -453,6 +471,72 @@ function newPattern() {
   toast(`${song.currentPattern.name}: a fresh pattern`);
 }
 
+/* ------------------------------- make a beat ------------------------------- */
+
+const newSeed = () => Math.floor(Math.random() * 2 ** 31);
+
+/**
+ * ⚡ Cynmixx: a whole arranged beat in place of the song, as one undo step (so
+ * Ctrl+Z brings the old song back). It plays from the top straight away.
+ */
+function makeBeat(keepTempo = false) {
+  const next = makeCynmixx({ seed: newSeed(), bpm: keepTempo ? song.data.bpm : undefined });
+  if (gesture) studio.commit();
+  studio.edit(() => {
+    song.data = next.data;
+  });
+  const { key } = song.data.gen;
+  Object.assign(ui, { key, scale: 'phrygian', kit: 'hood', songId: null, playlist: true });
+  saveUi();
+  roll.selected.clear();
+  roll.scroll = null;
+  layout();
+  renderAll();
+  browser.render();
+  engine.play(0);
+  renderTransport();
+  toast(`Cynmixx-type beat · ${KEY_NAMES[key]} Phrygian · ${song.data.bpm} BPM — ♪ Melody and ◈ Drums re-roll it, Ctrl+Z goes back`);
+}
+
+/** Re-roll the melody (808, arp, lead, brass or strings) or the drums of a generated beat. */
+function reroll(what) {
+  if (!isGenerated(song)) return toast('Make a ⚡ Cynmixx beat first: re-rolling works on the beats it makes', true);
+  studio.edit(() => (what === 'melody' ? applyMelody(song, newSeed()) : applyDrums(song, newSeed())));
+  toast(what === 'melody' ? 'New melody: the 808, arp, lead and pads are rewritten, the drums kept' : 'New drums: same bounce, new ghosts, rolls and percs');
+  if (!engine.playing) {
+    engine.play();
+    renderTransport();
+  }
+}
+
+/* ---------------------------------- pads ----------------------------------- */
+
+const PAD_KEYS = { KeyQ: 'stutter2', KeyB: 'stutter1', KeyV: 'tape' };
+const padsHeld = new Set();
+
+function padDown(pad) {
+  if (padsHeld.has(pad)) return;
+  padsHeld.add(pad);
+  if (pad === 'tape') engine.pad({ tape: true });
+  else engine.pad({ stutter: pad === 'stutter2' ? 2 : 1 });
+  renderPads();
+}
+
+function padUp(pad) {
+  if (!padsHeld.delete(pad)) return;
+  if (pad === 'tape') engine.pad({ tape: false });
+  else {
+    // Let go of one stutter while holding the other: the held one carries on.
+    const other = pad === 'stutter2' ? 'stutter1' : 'stutter2';
+    engine.pad({ stutter: padsHeld.has(other) ? (other === 'stutter2' ? 2 : 1) : 0 });
+  }
+  renderPads();
+}
+
+function renderPads() {
+  for (const b of document.querySelectorAll('.pad')) b.classList.toggle('is-down', padsHeld.has(b.dataset.pad));
+}
+
 /* -------------------------------- live play -------------------------------- */
 
 const keys = new KeyboardInstrument({
@@ -469,7 +553,7 @@ trackFocus(keys);
 function playLive(id, channelId, midi, velocity) {
   const ch = song.channel(channelId);
   if (!ch) return;
-  const notes = ui.chords && ch.kind === 'synth' ? chordFor(midi, ui.key) : [midi];
+  const notes = ui.chords && ch.kind === 'synth' ? chordFor(midi, ui.key, ui.scale) : [midi];
   engine.liveOn(id, ch.id, notes, velocity);
 }
 
@@ -519,7 +603,7 @@ function refreshKeyLabels() {
       label.textContent = '';
       continue;
     }
-    label.textContent = ui.chords ? chordName(chordFor(m, ui.key)) : noteName(m).replace(/-?\d+$/, '');
+    label.textContent = ui.chords ? chordName(chordFor(m, ui.key, ui.scale)) : noteName(m).replace(/-?\d+$/, '');
   }
   $('octValue').textContent = `C${keys.octave}`;
   $('keyRow').classList.toggle('is-chords', ui.chords);
@@ -594,12 +678,18 @@ function wireShortcuts() {
       stepPattern(-1);
     } else if (e.code === 'BracketRight') {
       stepPattern(1);
+    } else if (e.code === 'KeyN' && !e.repeat) {
+      reroll('melody');
+    } else if (PAD_KEYS[e.code]) {
+      if (!e.repeat) padDown(PAD_KEYS[e.code]);
     }
   });
   // A space released on a focused button would click it too.
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space' && keys.active) e.preventDefault();
+    if (PAD_KEYS[e.code]) padUp(PAD_KEYS[e.code]);
   });
+  window.addEventListener('blur', () => [...padsHeld].forEach(padUp));
   document.addEventListener('pointerup', (e) => {
     const b = e.target.closest?.('button');
     if (b) b.blur();
@@ -845,6 +935,21 @@ function toast(text, bad = false) {
   toastTimer = setTimeout(() => (t.hidden = true), 2600);
 }
 
+/* -------------------------------- backdrop --------------------------------- */
+
+const backdrop = new DataCenter($('voidCanvas'));
+let drumLevel = 0;
+let lastHit = 0;
+
+/** The mix's loudness and whether a drum just hit, for the backdrop. */
+function drumHit(now) {
+  const d = tapLevel(engine.drumTap);
+  const hit = d > 0.3 && d > drumLevel * 1.35 + 0.08 && now - lastHit > 90;
+  if (hit) lastHit = now;
+  drumLevel = d;
+  return hit;
+}
+
 /* -------------------------------- visualizer ------------------------------- */
 
 const viz = new ScopeDisplay($('vizGrid'), $('vizBeam'));
@@ -896,6 +1001,7 @@ function frame(now) {
     lastPos = text;
   }
   if (ui.browser) drawViz(dt);
+  backdrop.draw(dt, { level: tapLevel(engine.outTap), hit: drumHit(now) });
   $('startVeil').hidden = !engine.ctx || engine.ctx.state !== 'suspended';
   requestAnimationFrame(frame);
 }
@@ -960,6 +1066,22 @@ function wire() {
     studio.edit(() => song.removePattern(song.data.current.pattern));
   });
   for (const b of $('viewTabs').children) b.addEventListener('click', () => showView(b.dataset.view));
+  for (const b of document.querySelectorAll('.win-toggle, .win-x')) b.addEventListener('click', () => showView(b.dataset.view));
+  $('cynmixxBtn').addEventListener('click', (e) => makeBeat(e.ctrlKey || e.metaKey));
+  $('ctaCynmixx').addEventListener('click', () => makeBeat());
+  $('newMelodyBtn').addEventListener('click', () => reroll('melody'));
+  $('newDrumsBtn').addEventListener('click', () => reroll('drums'));
+  for (const b of document.querySelectorAll('.pad')) {
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      b.setPointerCapture(e.pointerId);
+      padDown(b.dataset.pad);
+    });
+    const up = () => padUp(b.dataset.pad);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('lostpointercapture', up);
+  }
   $('undoBtn').addEventListener('click', undo);
   $('redoBtn').addEventListener('click', redo);
   $('volume').value = String(Math.round(ui.volume * 100));
@@ -1037,15 +1159,25 @@ function wire() {
   KEY_NAMES.forEach((k, i) => {
     const o = document.createElement('option');
     o.value = String(i);
-    o.textContent = `${k} major`;
+    o.textContent = k;
     $('rollKey').appendChild(o);
   });
-  $('rollKey').addEventListener('change', (e) => {
-    ui.key = Number(e.target.value);
+  for (const [id, sc] of Object.entries(SCALES)) {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = sc.label;
+    $('rollScale').appendChild(o);
+  }
+  if (!(ui.scale in SCALES)) ui.scale = 'major';
+  const keyChanged = (e) => {
+    ui.key = Number($('rollKey').value);
+    ui.scale = $('rollScale').value;
     saveUi();
     refreshKeyLabels();
     e.target.blur();
-  });
+  };
+  $('rollKey').addEventListener('change', keyChanged);
+  $('rollScale').addEventListener('change', keyChanged);
   $('rollChannel').addEventListener('change', (e) => {
     studio.selectChannel(e.target.value);
     roll.selected.clear();

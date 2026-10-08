@@ -800,4 +800,128 @@ check('MIDI files from elsewhere: running status, note-on velocity 0 as off, typ
   assert.ok(Math.abs(r.bpm - 100) < 0.01);
   assert.deepEqual(r.tracks.map((t) => [t.channel, t.notes[0].midi, t.notes[0].start, t.notes[0].length]), [[0, 60, 0, 4], [9, 36, 0, 4]]);
 });
+
+const cyn = await import('../src/js/daw/cynmixx.js');
+console.log('\ncynmixx beats, hood sounds and plugins');
+const inPhrygian = (midi, key) => sounds.inScale(midi, key, 'phrygian');
+check('one click makes a whole arranged hoodtrap song: sections, playlist, song mode, 140–150 BPM', () => {
+  const s = cyn.makeCynmixx({ seed: 7 });
+  assert.deepEqual(s.patterns.map((p) => [p.name, p.bars]), [['Intro', 4], ['Hook', 4], ['Verse', 4], ['Breakdown', 4]]);
+  assert.ok(s.data.bpm >= 140 && s.data.bpm <= 150, `${s.data.bpm} BPM`);
+  assert.equal(s.data.mode, 'song'); assert.equal(s.songSteps, 32 * 16);
+  const order = [...s.data.playlist.clips].sort((a, b) => a.start - b.start).map((c) => s.pattern(c.pattern).name);
+  assert.deepEqual(order, ['Intro', 'Hook', 'Verse', 'Breakdown', 'Hook']);
+  assert.ok(s.channels.length <= 16 && s.channels.every((c) => c.insert >= 1 && c.insert <= daw.INSERTS));
+  assert.ok(s.channels.filter((c) => c.kind === 'drum').every((c) => c.kit === 'hood'));
+  assert.ok(daw.eventsBetween(s, 'song', 0, s.songSteps).length > 500, 'plenty going on');
+  assert.equal(s.past.length, 0);
+});
+check('the same seed makes the same beat; another seed, another one', () => {
+  const a = JSON.stringify(cyn.makeCynmixx({ seed: 99 }).toJSON());
+  assert.equal(JSON.stringify(cyn.makeCynmixx({ seed: 99 }).toJSON()), a);
+  assert.notEqual(JSON.stringify(cyn.makeCynmixx({ seed: 100 }).toJSON()), a);
+});
+check('the hook has the signature snare bounce (1, 7, 13 then 7, 13) with ghosts, and the 808 lands on it', () => {
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const s = cyn.makeCynmixx({ seed });
+    const { roles, sections } = s.data.gen;
+    const snare = s.notes(sections.hook, roles.snare);
+    const loud = snare.filter((n) => n.velocity > 0.6 && n.start < 32).map((n) => n.start).sort((a, b) => a - b);
+    assert.deepEqual(loud, cyn.BOUNCE, `seed ${seed}`);
+    assert.ok(snare.some((n) => n.velocity < 0.4), 'ghost notes');
+    const bass = s.notes(sections.hook, roles.bass).filter((n) => n.start < 32).map((n) => n.start);
+    assert.deepEqual(bass, cyn.BOUNCE);
+    const claps = s.notes(sections.hook, roles.clap).filter((n) => n.start < 32).map((n) => n.start);
+    assert.deepEqual(claps, cyn.CLAPS, 'claps on 2 and 4');
+    const breakdownClaps = s.notes(sections.breakdown, roles.clap).map((n) => n.start);
+    assert.deepEqual(breakdownClaps, Array.from({ length: 16 }, (_, i) => i * 4), 'breakdown: a clap on every beat');
+  }
+});
+check('every melodic note is in the Phrygian key, and the lead goes up an octave the second time', () => {
+  for (const seed of [11, 12, 13, 14, 15, 16]) {
+    const s = cyn.makeCynmixx({ seed });
+    const { roles, sections, key } = s.data.gen;
+    for (const sec of cyn.SECTIONS) for (const role of ['bass', 'arp', 'lead', 'counter']) {
+      for (const n of s.notes(sections[sec], roles[role])) assert.ok(inPhrygian(n.midi, key), `${seed} ${sec} ${role} ${n.midi}`);
+    }
+    const lead = s.notes(sections.hook, roles.lead);
+    const first = lead.filter((n) => n.start < 32), second = lead.filter((n) => n.start >= 32);
+    assert.deepEqual(second.map((n) => n.midi), first.map((n) => n.midi + 12));
+    assert.ok(lead.every((n) => n.midi >= 40 && n.midi <= 90), 'a sane register');
+    const verseLead = s.notes(sections.verse, roles.lead);
+    assert.equal(verseLead.length, 0, 'the verse leaves room for vocals');
+  }
+});
+check('the 808 and the lead slide: some notes overlap the next one, so the mono voice glides', () => {
+  let slides = 0;
+  for (let seed = 20; seed < 40; seed++) {
+    const s = cyn.makeCynmixx({ seed });
+    const { roles, sections } = s.data.gen;
+    for (const role of ['bass', 'lead']) {
+      const ns = [...s.notes(sections.hook, roles[role])].sort((a, b) => a.start - b.start);
+      for (let i = 1; i < ns.length; i++) if (ns[i - 1].start + ns[i - 1].length > ns[i].start) slides++;
+    }
+  }
+  assert.ok(slides > 20, `${slides} slides`);
+});
+check('New melody rewrites the melody and keeps the drums; New drums the other way round', () => {
+  const s = cyn.makeCynmixx({ seed: 5 });
+  const { roles, sections } = s.data.gen;
+  const grab = (role) => JSON.stringify(cyn.SECTIONS.map((sec) => s.notes(sections[sec], roles[role]).map((n) => [n.start, n.midi, n.length])));
+  const drumsBefore = grab('snare') + grab('hat'), leadBefore = grab('lead') + grab('arp');
+  cyn.applyMelody(s, 12345);
+  assert.equal(grab('snare') + grab('hat'), drumsBefore);
+  assert.notEqual(grab('lead') + grab('arp'), leadBefore);
+  const leadNow = grab('lead');
+  cyn.applyDrums(s, 777);
+  assert.equal(grab('lead'), leadNow);
+  assert.ok(cyn.isGenerated(s)); assert.ok(!cyn.isGenerated(daw.newSong()));
+});
+check('a generated song saved and opened again can still be re-rolled', () => {
+  const s = cyn.makeCynmixx({ seed: 8 });
+  const back = daw.loadSong(JSON.stringify(s.toJSON()));
+  assert.ok(cyn.isGenerated(back));
+  assert.equal(back.data.gen.key, s.data.gen.key);
+  for (const [role, id] of Object.entries(back.data.gen.roles)) assert.ok(back.channel(id), role);
+  cyn.applyMelody(back, 3);
+  assert.ok(back.notes(back.data.gen.sections.hook, back.data.gen.roles.lead).length > 0);
+});
+check('Phrygian and friends: the key\'s notes, and chords from the scale', () => {
+  assert.deepEqual(sounds.SCALES.phrygian.steps, [0, 1, 3, 5, 7, 8, 10]);
+  assert.ok(sounds.inScale(61, 0, 'phrygian') && !sounds.inScale(62, 0, 'phrygian'));
+  assert.equal(sounds.chordName(sounds.chordFor(60, 0, 'phrygian')), 'Cm');
+  assert.equal(sounds.chordName(sounds.chordFor(61, 0, 'phrygian')), 'C♯');   // the ♭II
+  assert.equal(sounds.chordName(sounds.chordFor(59, 0, 'harmonic')), 'B°');
+  assert.equal(sounds.chordName(sounds.chordFor(63, 0, 'harmonic')), 'E♭+');
+  assert.deepEqual(sounds.chordFor(60, 0), sounds.chordFor(60, 0, 'major'));
+});
+check('the Hood group, the hood kit, the new drums and the Hoodtrap beat are all there', () => {
+  const hood = Object.entries(sounds.SOUNDS).filter(([, p]) => p.group === 'hood').map(([id]) => id);
+  for (const id of ['hollow', 'glider', 'globrass', 'tremstr', 'logdrum', 'spinz808', 'siren']) assert.ok(hood.includes(id), id);
+  assert.ok('hood' in drums.KITS && drums.KIT_LABELS.hood);
+  for (const d of ['snap', 'perc', 'chant', 'riser']) {
+    assert.ok(d in daw.DRUMS, d);
+    assert.equal(daw.GM_TO_DRUM.get(daw.DRUMS[d].gm), d, `${d} comes back from MIDI`);
+  }
+  assert.equal(drums.BEATS.hoodtrap.kit, 'hood');
+  assert.equal(drums.BEATS.hoodtrap.snare.indexOf('x'), 0);
+});
+check('Clip: unity below the knee, flat at the ceiling, nothing at zero', () => {
+  assert.equal(fx.clipCurve(0), null);
+  const c = fx.clipCurve(1, 1025);
+  assert.ok(Math.abs(c[512]) < 1e-6, 'silence stays silence');
+  assert.ok(Math.max(...c) <= 1 + 1e-6 && Math.max(...c) > 0.99, 'pinned at full scale');
+  const soft = fx.clipCurve(0.001 + 1e-9, 1025);
+  assert.ok(Math.abs(soft[512 + 100] - 100 / 512) < 0.01, 'a touch of clip leaves quiet sound alone');
+  assert.equal(fx.clipGain(0), 1); assert.equal(fx.clipGain(1), 8);
+  assert.equal(fx.FX_DEFAULTS.clip, 0); assert.equal(fx.FX_DEFAULTS.gate, 0);
+});
+check('Gate: opens fast at the step, closes a little past half way, to a floor set by the knob', () => {
+  const g = fx.gateShape(0.85, 0.1);
+  assert.ok(Math.abs(g.floor - 0.15) < 1e-9);
+  assert.ok(g.open > 0 && g.open < g.close && g.close + g.fall < 0.1);
+  const tiny = fx.gateShape(1, 0.01);
+  assert.ok(tiny.close + tiny.fall <= 0.01 && tiny.floor === 0);
+  assert.equal(daw.defaultMixer()[1].fx.gate, 0, 'mixer strips start with the gate off');
+});
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);

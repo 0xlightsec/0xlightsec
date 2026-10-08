@@ -8,10 +8,8 @@
  */
 
 import { SOUNDS, GROUPS } from '../../studio/sounds.js';
-import { KITS, BEATS } from '../../studio/drums.js';
+import { KITS, BEATS, KIT_LABELS } from '../../studio/drums.js';
 import { DRUMS } from '../model.js';
-
-const KIT_LABELS = { classic: 'Classic', boom: 'Boom (trap)', lofi: 'Lo-fi', hyper: 'Hyper', rage: 'Rage', club: 'Club', rock: 'Rock' };
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -24,7 +22,7 @@ export class Browser {
   constructor(root, studio) {
     this.root = root;
     this.studio = studio;
-    this.open = new Set(['beats', 'drums']);
+    this.open = new Set(['beats', 'g:hood']);
     this.render();
   }
 

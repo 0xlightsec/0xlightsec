@@ -90,7 +90,7 @@ export class Playlist {
     g.rect(HEAD_W, RULER_H, w - HEAD_W, h - RULER_H);
     g.clip();
     for (let t = 0; t < this.tracks; t++) {
-      g.fillStyle = t % 2 ? '#120610' : '#160814';
+      g.fillStyle = t % 2 ? '#08101a' : '#0b1420';
       g.fillRect(HEAD_W, RULER_H + t * th, w - HEAD_W, th);
     }
     // Past the end of the song, slightly darker.
@@ -102,10 +102,10 @@ export class Playlist {
     const bars = Math.ceil((w - HEAD_W) / this.barW) + 1;
     for (let b = Math.floor(this.from); b < this.from + bars; b++) {
       const x = Math.round(this.xOf(b * STEPS_PER_BAR)) + 0.5;
-      g.fillStyle = b % 4 === 0 ? 'rgba(255, 200, 240, 0.2)' : 'rgba(255, 200, 240, 0.08)';
+      g.fillStyle = b % 4 === 0 ? 'rgba(140, 220, 255, 0.2)' : 'rgba(140, 220, 255, 0.08)';
       g.fillRect(x - 0.5, RULER_H, 1, h);
       if (this.barW >= 48) {
-        g.fillStyle = 'rgba(255, 200, 240, 0.035)';
+        g.fillStyle = 'rgba(140, 220, 255, 0.035)';
         for (let q = 1; q < 4; q++) g.fillRect(Math.round(this.xOf(b * STEPS_PER_BAR + q * 4)), RULER_H, 1, h);
       }
     }
@@ -178,7 +178,7 @@ export class Playlist {
 
   drawRuler(playhead) {
     const g = this.g;
-    g.fillStyle = '#12050f';
+    g.fillStyle = '#060b13';
     g.fillRect(0, 0, this.w, RULER_H);
     g.font = '10px ui-monospace, Menlo, Consolas, monospace';
     g.textBaseline = 'middle';
@@ -188,7 +188,7 @@ export class Playlist {
       if (b % every) continue;
       const x = this.xOf(b * STEPS_PER_BAR);
       if (x < HEAD_W) continue;
-      g.fillStyle = 'rgba(255, 220, 245, 0.65)';
+      g.fillStyle = 'rgba(190, 236, 255, 0.65)';
       g.fillText(String(b + 1), x + 4, RULER_H / 2);
     }
     // Where the song plays from.
@@ -211,7 +211,7 @@ export class Playlist {
   drawHeads() {
     const g = this.g;
     const th = this.trackH;
-    g.fillStyle = '#0e040c';
+    g.fillStyle = '#050a11';
     g.fillRect(0, 0, HEAD_W, this.h);
     g.font = '10px ui-sans-serif, system-ui, sans-serif';
     g.textBaseline = 'middle';
@@ -219,10 +219,10 @@ export class Playlist {
       const y = RULER_H + t * th;
       g.fillStyle = 'rgba(255, 255, 255, 0.04)';
       g.fillRect(4, y + 2, HEAD_W - 8, th - 4);
-      g.fillStyle = 'rgba(235, 210, 230, 0.6)';
+      g.fillStyle = 'rgba(180, 215, 236, 0.6)';
       g.fillText(`Track ${t + 1}`, 12, y + th / 2);
     }
-    g.fillStyle = 'rgba(235, 210, 230, 0.45)';
+    g.fillStyle = 'rgba(180, 215, 236, 0.45)';
     g.font = '9px ui-monospace, Menlo, Consolas, monospace';
     g.fillText('PLAYLIST', 10, RULER_H / 2);
   }

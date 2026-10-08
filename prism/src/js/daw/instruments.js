@@ -41,6 +41,7 @@ export class DrumSynth {
     this.kit = KITS.classic;
     this.curves = new Map();
     this.booked = [];
+    this.bpm = 130; // a riser lasts a bar
   }
 
   setKit(name) {
@@ -166,6 +167,81 @@ export class DrumSynth {
     this.noise(at, sources, { type: 'bandpass', freq: 3500 * pitch, q: 2, level: 0.25 * v, length: 0.025 });
     return this.osc(at, sources, { type: 'triangle', from: 1750 * pitch, level: 0.35 * v, length: 0.035 });
   }
+
+  /** Finger snap: a tight click and a short bright burst, layered on snares in hoodtrap. */
+  v_snap(at, v, pitch, sources) {
+    this.noise(at, sources, { type: 'bandpass', freq: 2600 * pitch, q: 3, level: 0.5 * v, length: 0.018, attack: 0.001 });
+    return this.noise(at + 0.006, sources, { type: 'bandpass', freq: 2100 * pitch, q: 1.6, level: 0.42 * v, length: 0.09, attack: 0.001 });
+  }
+
+  /** Jersey bounce perc: a conga-like knock with a little skin noise. */
+  v_perc(at, v, pitch, sources) {
+    this.noise(at, sources, { type: 'bandpass', freq: 2400 * pitch, q: 1.4, level: 0.12 * v, length: 0.02 });
+    return this.osc(at, sources, { type: 'triangle', from: 520 * pitch, to: 400 * pitch, glide: 0.05, level: 0.7 * v, length: 0.16 });
+  }
+
+  /**
+   * The jerk chant: a gang shouting "hey". A few buzzy voices, a little out of
+   * tune with each other, through the formants of "eh" sliding to "ee", after a
+   * breathy "h".
+   */
+  v_chant(at, v, pitch, sources) {
+    const ctx = this.ctx;
+    const length = 0.26;
+    this.noise(at, sources, { type: 'bandpass', freq: 1700 * pitch, q: 1, level: 0.22 * v, length: 0.05, attack: 0.004 });
+    const formants = [[560, 420, 1], [1750, 2150, 0.55], [2600, 2900, 0.25]];
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    for (const [from, to, level] of formants) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 6;
+      bp.frequency.setValueAtTime(from * pitch, at + 0.03);
+      bp.frequency.linearRampToValueAtTime(to * pitch, at + length);
+      const g = ctx.createGain();
+      g.gain.value = level * 2.4;
+      bus.connect(bp).connect(g).connect(this.tone);
+    }
+    const env = this.env(at + 0.025, 0.55 * v, 0.02, length);
+    env.connect(bus);
+    for (const [ratio, detune] of [[1, 0], [1.012, 9], [0.991, -11], [1.5, 4]]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(210 * ratio * pitch, at + 0.025);
+      o.frequency.linearRampToValueAtTime(180 * ratio * pitch, at + length);
+      o.detune.value = detune;
+      const g = ctx.createGain();
+      g.gain.value = ratio === 1.5 ? 0.12 : 0.3;
+      o.connect(g).connect(env);
+      o.start(at + 0.025);
+      o.stop(at + length + 0.05);
+      sources.push(o);
+    }
+    return at + length + 0.03;
+  }
+
+  /** Riser: white noise sweeping up over one bar into the drop. */
+  v_riser(at, v, pitch, sources) {
+    const ctx = this.ctx;
+    const length = (240 / this.bpm) * 0.98;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseFor(ctx);
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 2.2;
+    f.frequency.setValueAtTime(350 * pitch, at);
+    f.frequency.exponentialRampToValueAtTime(Math.min(16000, 9000 * pitch), at + length);
+    const amp = ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, at);
+    amp.gain.exponentialRampToValueAtTime(0.32 * v, at + length * 0.97);
+    amp.gain.linearRampToValueAtTime(0.0001, at + length);
+    src.connect(f).connect(amp).connect(this.tone);
+    src.start(at, Math.random() * 0.5);
+    src.stop(at + length + 0.02);
+    sources.push(src);
+    return at + length;
+  }
 }
 
 /**
@@ -182,6 +258,8 @@ export class Instrument {
     this.panner.connect(out);
     if (tap) this.panner.connect(tap);
     this.kind = null;
+    this.bpm = 0;
+    this.born = ctx.currentTime;
     this.update(channel, true);
   }
 
@@ -201,6 +279,7 @@ export class Instrument {
       this.kind = ch.kind;
       if (ch.kind === 'drum') this.drums = new DrumSynth(this.ctx, this.out);
       else this.synth = new StudioSynth(this.ctx, this.out);
+      if (this.bpm) this.setTempo(this.bpm);
     }
     if (this.synth) {
       if (this.synth.sound !== ch.sound && ch.sound in SOUNDS) {
@@ -212,13 +291,23 @@ export class Instrument {
       this.drum = ch.drum;
       this.drums.setKit(ch.kit);
     }
+    this.audible = audible;
+    const gain = audible ? levelGain(ch.volume) : 0;
+    if (this.ctx.currentTime <= this.born) {
+      // Settings made as it's created land at once: a muted channel never starts at full volume.
+      this.out.gain.value = gain;
+      this.panner.pan.value = ch.pan;
+      return;
+    }
     const t = this.ctx.currentTime;
-    this.out.gain.setTargetAtTime(audible ? levelGain(ch.volume) : 0, t, 0.01);
+    this.out.gain.setTargetAtTime(gain, t, 0.01);
     this.panner.pan.setTargetAtTime(ch.pan, t, 0.01);
   }
 
   setTempo(bpm) {
+    this.bpm = bpm;
     if (this.synth) this.synth.bpm = bpm;
+    if (this.drums) this.drums.bpm = bpm;
   }
 
   /** Book a note: a synth plays it for `duration`; a drum is a one-shot, tuned by the note. */

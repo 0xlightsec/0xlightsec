@@ -32,7 +32,8 @@ export const GROUPS = [
   { id: 'bass',  label: 'Bass' },
   { id: 'lead',  label: 'Lead' },
   { id: 'pluck', label: 'Pluck' },
-  { id: 'hyper', label: 'Hyper' }
+  { id: 'hyper', label: 'Hyper' },
+  { id: 'hood',  label: 'Hood' }
 ];
 
 export const SOUNDS = {
@@ -68,7 +69,16 @@ export const SOUNDS = {
   ragelead: { group: 'hyper', label: 'Rage Lead', short: 'Rage', osc: [{ saws: 7, spread: 35 }, tone('square', 2, 0.25)], env: [0.003, 0.5, 0.75, 0.25], cutoff: 7000, level: 0.055, drive: 0.3 },
   hyperlead:{ group: 'hyper', label: 'Hyper Lead', short: 'Hyper', osc: [tone('square', 1, 0.5, -6), saw(6, 0.5), tone('sine', 2, 0.25)], env: [0.005, 0.3, 0.8, 0.2], cutoff: 9000, level: 0.09, mono: true, glide: 0.05, pitch: { semis: -3, time: 0.06 }, lfo: { to: 'pitch', rate: 7, depth: 22, delay: 0.15 } },
   glitchbell:{ group: 'hyper', label: 'Glitch Bell', short: 'Glitch', osc: [tone('sine', 1, 0.8), tone('sine', 3.5, 0.4), tone('sine', 7.1, 0.2)], env: [0.001, 0.35, 0, 0.4], cutoff: 12000, level: 0.22, pitch: { semis: 12, time: 0.01 } },
-  dist808:  { group: 'hyper', label: 'Dist 808', osc: [tone('sine', 1, 0.9)], env: [0.003, 1.6, 0, 0.6], cutoff: 4000, level: 0.26, shift: -12, mono: true, glide: 0.1, pitch: { semis: 14, time: 0.06 }, drive: 0.9 }
+  dist808:  { group: 'hyper', label: 'Dist 808', osc: [tone('sine', 1, 0.9)], env: [0.003, 1.6, 0, 0.6], cutoff: 4000, level: 0.26, shift: -12, mono: true, glide: 0.1, pitch: { semis: 14, time: 0.06 }, drive: 0.9 },
+  // Hood: hoodtrap / "mixx" beats in the Cynmixx style. Dirty hollow arps, a
+  // gliding lead, brass and trembling strings, log drums, a clipped 808, a siren.
+  hollow:   { group: 'hood', label: 'Hollow Fade', short: 'Hollow', osc: [tone('square', 1, 0.5, -7), tone('square', 1, 0.5, 7), tone('sawtooth', 2, 0.14)], env: [0.003, 0.55, 0.45, 0.3], cutoff: 1100, env2: 2600, level: 0.085, drive: 0.55 },
+  glider:   { group: 'hood', label: 'Glider', osc: [saw(-9, 0.55), saw(9, 0.55), tone('square', 2, 0.16)], env: [0.008, 0.4, 0.8, 0.22], cutoff: 4200, level: 0.075, drive: 0.25, mono: true, glide: 0.11, lfo: { to: 'pitch', rate: 5.6, depth: 16, delay: 0.3 } },
+  globrass: { group: 'hood', label: 'Glo Brass', short: 'Brass', osc: [{ saws: 3, spread: 11 }, tone('square', 0.5, 0.3)], env: [0.035, 0.6, 0.75, 0.22], cutoff: 900, env2: 3200, level: 0.08, drive: 0.25 },
+  tremstr:  { group: 'hood', label: 'Trem Strings', short: 'Trem', osc: [{ saws: 3, spread: 12 }], env: [0.06, 1, 0.85, 0.5], cutoff: 3000, level: 0.09, lfo: { to: 'amp', beats: 0.25, depth: 0.8 } },
+  logdrum:  { group: 'hood', label: 'Log Drum', short: 'Log', osc: [tone('sine', 1, 0.9), tone('sine', 2, 0.22), tone('square', 1, 0.1)], env: [0.002, 0.32, 0, 0.22], cutoff: 2200, level: 0.3, shift: -12, pitch: { semis: 7, time: 0.035 }, drive: 0.3 },
+  spinz808: { group: 'hood', label: 'Spinz 808', short: 'Spinz', osc: [tone('sine', 1, 0.9), tone('triangle', 2, 0.14)], env: [0.002, 1.2, 0, 0.35], cutoff: 5000, level: 0.3, shift: -12, mono: true, glide: 0.07, pitch: { semis: 18, time: 0.035 }, drive: 0.75 },
+  siren:    { group: 'hood', label: 'Siren', osc: [saw(0, 0.5), tone('square', 1, 0.3, 7)], env: [0.05, 1, 0.9, 0.4], cutoff: 3000, level: 0.065, lfo: { to: 'pitch', beats: 1, depth: 500 } }
 };
 
 /** Knob centre (0.5) plays a sound as designed; each side scales it by up to 8x. */
@@ -76,29 +86,49 @@ export const shapeFactor = (v) => Math.pow(8, (Math.min(1, Math.max(0, v)) - 0.5
 export const SHAPE_DEFAULT = { tone: 0.5, attack: 0.5, release: 0.5 };
 
 export const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
-const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 
 /**
- * The chord a key plays in chord mode, in the major key with tonic `key` (pitch
- * class). Notes of the scale get their own triad from the scale (I ii iii IV V vi
- * vii°); the notes between them get a major triad, for colour.
+ * Scales a key can be in, as semitones above the tonic. Phrygian (the flat
+ * second a half step over the root) is the dark, tense sound of hoodtrap and drill.
  */
-export function chordFor(midi, key = 0) {
-  const degree = MAJOR.indexOf((((midi - key) % 12) + 12) % 12);
+export const SCALES = {
+  major:    { label: 'major', steps: [0, 2, 4, 5, 7, 9, 11] },
+  minor:    { label: 'minor', steps: [0, 2, 3, 5, 7, 8, 10] },
+  phrygian: { label: 'Phrygian', steps: [0, 1, 3, 5, 7, 8, 10] },
+  harmonic: { label: 'harm. minor', steps: [0, 2, 3, 5, 7, 8, 11] },
+  phrydom:  { label: 'Phryg. dom.', steps: [0, 1, 4, 5, 7, 8, 10] }
+};
+
+const scaleSteps = (scale) => (SCALES[scale] ?? SCALES.major).steps;
+
+/** Is a note in the scale with tonic `key`? */
+export function inScale(midi, key = 0, scale = 'major') {
+  return scaleSteps(scale).includes((((midi - key) % 12) + 12) % 12);
+}
+
+/**
+ * The chord a key plays in chord mode, in the scale with tonic `key` (pitch
+ * class). Notes of the scale get their own triad from the scale (in major:
+ * I ii iii IV V vi vii°); the notes between them get a major triad, for colour.
+ */
+export function chordFor(midi, key = 0, scale = 'major') {
+  const steps = scaleSteps(scale);
+  const degree = steps.indexOf((((midi - key) % 12) + 12) % 12);
   if (degree < 0) return [midi, midi + 4, midi + 7];
-  const up = (steps) => {
-    const d = degree + steps;
-    return MAJOR[d % 7] + 12 * Math.floor(d / 7) - MAJOR[degree];
+  const up = (n) => {
+    const d = degree + n;
+    return steps[d % 7] + 12 * Math.floor(d / 7) - steps[degree];
   };
   return [midi, midi + up(2), midi + up(4)];
 }
 
-/** Name of a chord from chordFor: "C", "Dm", "B°". */
+/** Name of a chord from chordFor: "C", "Dm", "B°", "C+". */
 export function chordName(notes) {
   const root = KEY_NAMES[((notes[0] % 12) + 12) % 12];
   const third = notes[1] - notes[0];
   const fifth = notes[2] - notes[0];
   if (third === 3 && fifth === 6) return `${root}°`;
+  if (third === 4 && fifth === 8) return `${root}+`;
   return third === 3 ? `${root}m` : root;
 }
 
@@ -190,6 +220,9 @@ export class StudioSynth {
     const v = this.voice(m, velocity, at, glideFrom);
     this.release(v, at + duration, v.release);
     const entry = { midi: m, start: at, end: at + duration, voice: v, freq: pianoFrequency(m) };
+    // Forget notes long finished, so their voices can be let go (sounding() does
+    // too, but only while the visualizer asks).
+    if (this.booked.length > 48) this.booked = this.booked.filter((b) => b.end + 2 > at);
     this.booked.push(entry);
     this.lastBooked = entry;
     return entry;
@@ -291,22 +324,29 @@ export class StudioSynth {
     });
     this.lastFreq = f;
 
+    // Tremolo multiplies the sound ahead of the envelope, so a release still fades it out.
+    let tail = filter;
     if (p.lfo) {
       const { to, depth, delay = 0 } = p.lfo;
       const lfo = ctx.createOscillator();
       lfo.frequency.value = p.lfo.beats ? this.bpm / 60 / p.lfo.beats : p.lfo.rate;
       const amount = ctx.createGain();
       amount.gain.setValueAtTime(0, now);
-      amount.gain.linearRampToValueAtTime(to === 'amp' ? depth * peak : depth, now + delay + 0.02);
+      amount.gain.linearRampToValueAtTime(depth, now + delay + 0.02);
       lfo.connect(amount);
       if (to === 'pitch') for (const o of oscs) amount.connect(o.detune);
       else if (to === 'filter') amount.connect(filter.frequency);
-      else amount.connect(amp.gain);
+      else {
+        const trem = ctx.createGain();
+        trem.gain.value = 1;
+        amount.connect(trem.gain);
+        tail = filter.connect(trem);
+      }
       lfo.start(now);
       oscs.push(lfo);
     }
 
-    filter.connect(amp).connect(this.out);
+    tail.connect(amp).connect(this.out);
     return { midi, amp, oscs, release: r };
   }
 }

@@ -14,12 +14,10 @@
  */
 
 import { SOUNDS, GROUPS } from '../../studio/sounds.js';
-import { KITS } from '../../studio/drums.js';
+import { KITS, KIT_LABELS } from '../../studio/drums.js';
 import { Knob } from '../../studio/knob.js';
 import { DRUMS, PATTERN_BARS, INSERTS, ROOT, hueOf } from '../model.js';
 import { hueFor, pitchClass } from '../../theory/circle.js';
-
-const KIT_LABELS = { classic: 'Classic', boom: 'Boom (trap)', lofi: 'Lo-fi', hyper: 'Hyper', rage: 'Rage', club: 'Club', rock: 'Rock' };
 
 const el = (tag, cls, attrs = {}) => {
   const e = document.createElement(tag);

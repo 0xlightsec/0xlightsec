@@ -2,7 +2,10 @@
  * The beatmaker's audio: transport, sequencer, live playing and recording, and
  * offline export.
  *
- *   channels ─▶ instruments ─▶ mixer inserts ─▶ master ─▶ limiter ─▶ volume ─▶ speakers
+ *   channels ─▶ instruments ─▶ mixer inserts ─▶ master ─▶ pads ─▶ limiter ─▶ volume ─▶ speakers
+ *
+ * The pads are the performance effects held on the whole mix (stutter, tape
+ * stop), from the Live page, locked to the song's grid.
  *
  * The sequencer is the "two clocks" kind: a timer every 25 ms books the notes of
  * the next 120 ms on the audio clock, so timing never depends on the page.
@@ -21,6 +24,8 @@ import { stepSeconds } from '../studio/drums.js';
 const LOOKAHEAD = 0.12;
 const TICK_MS = 25;
 const START_DELAY = 0.06;
+const RENDER_CHUNK = 2;    // export: seconds booked per pause
+const RENDER_AHEAD = 0.5;  // and how far past the next pause
 
 function limiter(ctx) {
   const l = ctx.createDynamicsCompressor();
@@ -53,6 +58,7 @@ export class Rig {
       let inst = this.instruments.get(ch.id);
       if (!inst) {
         inst = new Instrument(this.ctx, out, ch, ch.kind === 'drum' ? this.taps.drum : this.taps.synth);
+        inst.setTempo(song.data.bpm); // tempo-synced wobbles, tremolo and risers need it from the start
         this.instruments.set(ch.id, inst);
       } else inst.route(out);
       inst.update(ch, song.audible(ch));
@@ -77,15 +83,21 @@ export class Rig {
     const swing = song.data.swing;
     for (const ev of eventsBetween(song, mode, s0, s1)) {
       const inst = this.instruments.get(ev.channel);
-      if (!inst) continue;
+      if (!inst?.audible) continue; // a muted channel's notes would only cost time
       const at = origin + (ev.step + swingOffset(ev.step, swing)) * step;
       const length = Math.min(ev.note.length, ev.room);
       inst.schedule(ev.note, at, Math.max(0.03, length * step * 0.97));
+    }
+    // Gates chop each sixteenth, swung like the notes.
+    if (this.mixer.strips.some((st) => st.fx.values.gate >= 0.001)) {
+      const time = (k) => origin + (k + swingOffset(k, swing)) * step;
+      for (let k = Math.ceil(s0 - 1e-9); k < s1; k++) this.mixer.gateStep(time(k), time(k + 1) - time(k));
     }
   }
 
   cancel() {
     for (const inst of this.instruments.values()) inst.cancel();
+    this.mixer.gateOpen();
   }
 }
 
@@ -124,6 +136,15 @@ export class DawEngine {
     this.master.gain.value = this.volume;
     this.limiter = limiter(ctx);
     this.limiter.connect(this.master).connect(ctx.destination);
+    // Everything the rig plays meets here, then the pads once they've loaded.
+    this.bus = ctx.createGain();
+    this.bus.connect(this.limiter);
+    this.ready = ctx.audioWorklet.addModule(new URL('../studio/perf-worklet.js', import.meta.url)).then(() => {
+      this.pads = new AudioWorkletNode(ctx, 'prism-perf', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+      this.bus.disconnect(this.limiter);
+      this.bus.connect(this.pads).connect(this.limiter);
+      this.sendPadGrid();
+    }).catch(() => { /* no pads; everything else plays */ });
     // Taps for the visualizer: melody and drums, measured apart; the whole mix after the limiter.
     const tap = (size) => {
       const a = ctx.createAnalyser();
@@ -134,7 +155,7 @@ export class DawEngine {
     this.drumTap = tap(1024);
     this.outTap = tap(2048);
     this.limiter.connect(this.outTap);
-    this.rig = new Rig(ctx, this.limiter, { synth: this.synthTap, drum: this.drumTap });
+    this.rig = new Rig(ctx, this.bus, { synth: this.synthTap, drum: this.drumTap });
     this.rig.sync(this.song);
     this.click = ctx.createGain();
     this.click.gain.value = 0.35;
@@ -152,8 +173,25 @@ export class DawEngine {
       const at = (now - this.origin) / stepSeconds(this.bpm);
       this.origin = now - at * stepSeconds(song.data.bpm);
     }
+    const moved = song.data.bpm !== this.bpm;
     this.bpm = song.data.bpm;
     this.rig.sync(song);
+    if (moved) this.sendPadGrid();
+  }
+
+  /* ---------------------------------- pads ----------------------------------- */
+
+  /** Hold a pad: { stutter: 2 | 1 | 0 } (eighths, sixteenths, let go) or { tape: true | false }. */
+  pad(msg) {
+    this.start();
+    this.pads?.port.postMessage(msg);
+  }
+
+  /** Stutter slices land on the song's sixteenths. */
+  sendPadGrid() {
+    if (!this.pads) return;
+    const sr = this.sampleRate;
+    this.pads.port.postMessage({ grid: { step: stepSeconds(this.bpm) * sr, origin: this.origin * sr } });
   }
 
   setVolume(v) {
@@ -177,6 +215,7 @@ export class DawEngine {
     this.booked = this.ctx.currentTime + START_DELAY;
     this.playing = true;
     this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.sendPadGrid();
     this.tick();
   }
 
@@ -276,6 +315,7 @@ export class DawEngine {
     const ch = { kind: spec.kind, sound: spec.sound, drum: spec.drum, kit: spec.kit ?? 'classic', shape: { tone: 0.5, attack: 0.5, release: 0.5 }, volume: 0.8, pan: 0 };
     if (!this.auditioner) this.auditioner = new Instrument(this.ctx, this.rig.mixer.input(0), ch);
     else this.auditioner.update(ch, true);
+    this.auditioner.setTempo(this.bpm);
     this.auditioner.noteOn('audition', ch.kind === 'drum' ? [60] : [midi], 0.8);
     clearTimeout(this.auditionTimer);
     this.auditionTimer = setTimeout(() => this.auditioner.noteOff('audition'), 450);
@@ -320,13 +360,32 @@ export class DawEngine {
   async render(mode = this.mode, { tail = 2, sampleRate = this.sampleRate } = {}) {
     const song = this.song;
     const period = song.period(mode);
-    const seconds = period * stepSeconds(song.data.bpm) + tail;
+    const step = stepSeconds(song.data.bpm);
+    const seconds = period * step + tail;
     const off = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
     const lim = limiter(off);
     lim.connect(off.destination);
     const rig = new Rig(off, lim);
     rig.sync(song);
-    rig.book(song, mode, 0, period, 0.02);
+    // Book a few seconds at a time, as playback does, pausing the render to book
+    // the next stretch. Booking the whole song up front would put every voice of
+    // it in the graph from the first sample, and a long song would crawl.
+    const origin = 0.02;
+    let booked = 0;
+    const bookUntil = (t) => {
+      const s1 = Math.min(period, (t - origin) / step);
+      if (s1 > booked) {
+        rig.book(song, mode, booked, s1, origin);
+        booked = s1;
+      }
+    };
+    bookUntil(RENDER_CHUNK + RENDER_AHEAD);
+    for (let t = RENDER_CHUNK; t < seconds; t += RENDER_CHUNK) {
+      off.suspend(t).then(() => {
+        bookUntil(t + RENDER_CHUNK + RENDER_AHEAD);
+        off.resume();
+      });
+    }
     return off.startRendering();
   }
 }

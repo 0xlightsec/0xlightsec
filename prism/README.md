@@ -34,7 +34,39 @@ Google on every launch, and that is switched off.
 ## Studio
 
 PRISM opens on the **Studio**, a beatmaker laid out like FL Studio. The window
-shortcuts are FL's too.
+shortcuts are FL's too. The windows are opaque panels floating over a live **data
+center**: points of light in a dark void, wired to their neighbours, with packets
+running along the wires. Every drum hit sends a pulse through it, and it breathes
+with the mix.
+
+### ⚡ One-click Cynmixx beats
+
+Press **⚡ Cynmixx** in the toolbar (or the big button in an empty playlist) and
+you get a whole hoodtrap / "mixx" beat in the style of prodbyCyn, arranged, mixed
+and playing:
+
+- **Tempo and key:** 144–150 BPM, in a Phrygian key. The ♭2 is a half step over
+  the root, and the melodies lean on the half steps.
+- **Snare:** the signature bounce, on steps 1, 7 and 13 of the first bar and only
+  the last two in the second. Quiet ghost notes fill the gaps and a snap is layered
+  on top.
+- **808:** a clipped, Spinz-style 808 that lands with the snare, on the root and
+  ♭2, with slides and octave jumps.
+- **Around them:** claps on 2 and 4, open hats with the 808s, a "hey" chant, Jersey
+  bounce percs, a crash, and risers into each hook.
+- **Melody:** a dirty **Hollow Fade** arp. A **Glider** lead plays a catchy
+  half-step line, then repeats it an octave up. **Glo Brass** stabs or **Trem
+  Strings** sit underneath.
+- **Form:** Intro → Hook → Verse → Breakdown → Hook. The verse drops the lead, to
+  leave room for vocals. The breakdown has a clap on every beat and the lead
+  chopped into sixteenths.
+
+Then **♪ Melody** (`N`) rewrites the 808, arp, lead and pads and keeps the drums,
+and **◈ Drums** rewrites the drums and keeps the melody. Keep re-rolling until it
+slaps. Everything stays editable, and `Ctrl+Z` takes you back, all the way to the
+song you had before. Ctrl+click **⚡ Cynmixx** to keep your tempo. The piano roll
+switches to the beat's key (e.g. *A♯ Phrygian*), and with **Chords** on, every key
+plays a chord from that scale.
 
 | window | key | what it's for |
 |---|---|---|
@@ -60,12 +92,15 @@ drag across to paint. Each row also has:
   channel), double-click to open the piano roll.
 
 A channel with pitched or long notes shows them in miniature instead of steps. The
-panel on the right edits the selected channel: its sound (any of the 27), or its
-drum (Kick, Snare, Clap, Hat, Open Hat, Crash, Tom, Rim) and kit (Classic, Boom,
-Lo-fi, Hyper, Rage, Club, Rock). It also has Tone/Attack/Release, the mixer insert,
-quick fills (every ⅛, ¼, ½ or bar), move, clone and delete. Patterns are 1–16 bars
-long and have a swing knob. **Beats** in the Browser writes a ready-made groove
-(Pulse to Grunge) into the current pattern. In an empty song it brings its tempo too.
+panel on the right edits the selected channel. It sets the sound: any of the 34,
+including the **Hood** group (Hollow Fade, Glider, Glo Brass, Trem Strings, Log
+Drum, Spinz 808, Siren). For a drum it sets which drum (Kick, Snare, Clap, Hat, Open
+Hat, Crash, Tom, Rim, Snap, Perc, Chant, Riser) and the kit (Classic, Boom, Lo-fi,
+Hyper, Rage, Club, Rock, Hood). A Riser lasts a bar, so start it a bar before the
+drop. The panel also has Tone/Attack/Release, the mixer insert, quick fills (every
+⅛, ¼, ½ or bar), move, clone and delete. Patterns are 1–16 bars long and have a
+swing knob. **Beats** in the Browser writes a ready-made groove (Pulse to Grunge,
+and Hoodtrap) into the current pattern. In an empty song it brings its tempo too.
 
 **Piano Roll.**
 - **Draw:** click to draw at the last note's length; with **Chords** on, a click
@@ -78,8 +113,10 @@ long and have a swing knob. **Beats** in the Browser writes a ready-made groove
 - **Move by keys:** `↑`/`↓` transpose (`Shift` for an octave) and `←`/`→` nudge by
   the snap.
 - **Velocity:** the lane underneath sets it, for a chord or the whole selection.
-- **Help:** other channels show as faint ghost notes; rows in the chosen key are
-  lit. Snap from 1/4 to 1/32; `Ctrl`+wheel zooms and `Shift`+wheel scrolls.
+- **Help:** other channels show as faint ghost notes, and rows in the chosen key and
+  scale are lit. The scales are major, minor, Phrygian, harmonic minor and Phrygian
+  dominant. Snap goes from 1/4 to 1/32; `Ctrl`+wheel zooms and `Shift`+wheel
+  scrolls.
 
 **Playlist.** Click to place the current pattern, drag to move it (`Alt` for beats
 instead of bars), drag a clip's end to stretch it, and the pattern repeats.
@@ -89,8 +126,27 @@ empty playlist puts the current pattern in at bar 1.
 
 **Mixer.** Every channel plays into its insert and every insert into the master.
 Each strip has a fader, pan, mute/solo and a peak meter, and lists the channels
-feeding it. Click a strip to edit its effects: Drive, Crush, Filter, Echo (synced
-to the tempo), Space (one shared hall) and Tape. Double-click a name to rename it.
+feeding it. Click a strip to edit its effects. Double-click a name to rename it.
+
+| effect | what it does |
+|---|---|
+| **Drive** | soft saturation |
+| **Crush** | fewer bits |
+| **Filter** | a DJ filter: low-pass to the left, high-pass to the right |
+| **Echo** | a dotted-eighth delay, synced to the tempo |
+| **Space** | a send to one shared hall |
+| **Tape** | wow, flutter and a dull top end |
+| **Clip** | gain into a hard ceiling with a soft knee, up to +18 dB: the loud 808 move |
+| **Gate** | a ShaperBox-style chopper that closes each sixteenth, locked to the song and swung with it |
+
+Presets set a whole strip in one click: **Clean**, **Loud 808**, **Chop**,
+**Dusty**, **Big room**, **Phone**.
+
+**Pads.** Next to the keyboard, hold them to play the whole mix:
+- **Stutter ⅛** (`Q`) and **Stutter 1/16** (`B`) repeat the last slice in time.
+- **Tape stop** (`V`) winds everything down like a turntable losing power.
+
+Let go and the song is back where it would have been.
 
 **MIDI.**
 - A MIDI keyboard plays the selected channel.
@@ -132,14 +188,15 @@ switches on by itself.
   layers. **Undo** (`Backspace` or `Ctrl+Z`) takes back the last layer and **Redo**
   (`Shift+Backspace`, `Ctrl+Shift+Z` or `Ctrl+Y`) puts it back, until you record
   something new. `Delete` clears everything.
-- **Beat**: nine grooves, each with its own drum kit and tempo (`B` turns it on and
+- **Beat**: ten grooves, each with its own drum kit and tempo (`B` turns it on and
   off): Pulse, Groove, Trap, **Lo-fi** (swung and dusty, with vinyl crackle),
   **Hyper** (hyperpop: blown-out kick, claps, hat rolls), **Rage** (distorted 808s),
-  **Jersey** (club kicks), **Punk** and **Grunge** (live-kit snare and crash). With
+  **Jersey** (club kicks), **Hoodtrap** (the 1-7-13 snare bounce), **Punk** and
+  **Grunge** (live-kit snare and crash). With
   a beat running a take snaps to 1, 2, 4 or 8 whole bars and starts on the nearest
   downbeat, so loops always line up however sloppily you press. If you make a loop
   first and add the beat afterwards, the tempo snaps to fit the loop instead.
-- **Sound**: 27 sounds in six groups (`1` to `6` picks a group; press it again
+- **Sound**: 34 sounds in seven groups (`1` to `7` picks a group; press it again
   for the next sound in it):
   - **Keys**: Soft Keys, E-Piano, Organ, Bells, Lo-fi Keys, Marimba
   - **Pads**: Warm Pad, Strings, Choir, Glass
@@ -148,6 +205,8 @@ switches on by itself.
     chord from one key), Whistle
   - **Pluck**: Pluck, Harp, Kalimba, Stab
   - **Hyper**: Rage Lead, Hyper Lead, Glitch Bell, Dist 808
+  - **Hood**: Hollow Fade, Glider, Glo Brass, Trem Strings (tremolo synced to the
+    beat), Log Drum, Spinz 808, Siren
 
   **Tone**, **Attack** and **Release** reshape whichever one you pick; the centre
   is the sound as designed. Basses and some leads play one note at a time and
@@ -393,8 +452,10 @@ src/js/theory/          circle.js · harmony.js · chords.js · ratios.js · pia
 src/js/io/              midi.js · audio-in.js · keyboard.js · synth.js
 src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
 src/js/daw/             model.js (song, patterns, playlist, mixer, undo) · midi-file.js ·
-                        instruments.js · mixer.js · engine.js · songs-db.js · app.js
-src/js/daw/views/       rack.js · piano-roll.js · playlist.js · mixer-view.js · browser.js
+                        instruments.js · mixer.js · engine.js · songs-db.js ·
+                        cynmixx.js (the one-click beat generator) · app.js
+src/js/daw/views/       rack.js · piano-roll.js · playlist.js · mixer-view.js · browser.js ·
+                        datacenter.js (the backdrop)
 src/js/studio/          (the Live page) engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
                         sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·
                         perf-worklet.js · project.js · library.js · roll.js ·
@@ -412,6 +473,9 @@ ratios, the piano tuning curve, that each figure spins at its real beat rate, an
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
 beatmaker's song model (steps and notes, pattern and song playback, loops and
 clip repeats, beats, undo, loading untrusted files), MIDI file reading and writing,
+the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
+on it, every melodic note in the Phrygian key, the octave-up hook, slides, re-rolls
+that keep the other half, re-rolling after a save), the scales, the clipper and gate,
 the looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per
 layer, saving and loading), the .prism file format, the stutter and tape-stop
 pads, the pitch shifter and autotune, the piano roll's pattern, undo and timing, the effect curves, the beat patterns and

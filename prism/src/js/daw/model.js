@@ -37,14 +37,20 @@ export const DRUMS = {
   openhat: { label: 'Open Hat', gm: 46 },
   crash:   { label: 'Crash', gm: 49 },
   tom:     { label: 'Tom', gm: 45 },
-  rim:     { label: 'Rim', gm: 37 }
+  rim:     { label: 'Rim', gm: 37 },
+  snap:    { label: 'Snap', gm: 26 },     // GM2 finger snap
+  perc:    { label: 'Perc', gm: 63 },     // a conga
+  chant:   { label: 'Chant', gm: 79 },    // no voice in GM: the open cuica's note
+  riser:   { label: 'Riser', gm: 29 }     // GM2's scratch: lasts a bar, so start it a bar before the drop
 };
 
 /** Every GM drum note we understand, to the drum that plays it. */
 export const GM_TO_DRUM = new Map([
   [35, 'kick'], [36, 'kick'], [37, 'rim'], [38, 'snare'], [40, 'snare'], [39, 'clap'],
   [42, 'hat'], [44, 'hat'], [46, 'openhat'], [49, 'crash'], [52, 'crash'], [55, 'crash'], [57, 'crash'],
-  [41, 'tom'], [43, 'tom'], [45, 'tom'], [47, 'tom'], [48, 'tom'], [50, 'tom']
+  [41, 'tom'], [43, 'tom'], [45, 'tom'], [47, 'tom'], [48, 'tom'], [50, 'tom'],
+  [26, 'snap'], [60, 'perc'], [61, 'perc'], [62, 'perc'], [63, 'perc'], [64, 'perc'],
+  [78, 'chant'], [79, 'chant'], [29, 'riser']
 ]);
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -61,12 +67,12 @@ export function defaultMixer() {
   return tracks;
 }
 
-/** A new song: FL's starting rack (kick, clap, hat, snare) plus an 808 and keys. */
-export function newSong() {
-  const song = new Song({
+/** A song with nothing in it: no channels, no patterns. */
+export function emptySong(name = 'Untitled', bpm = 130) {
+  return new Song({
     version: VERSION,
-    name: 'Untitled',
-    bpm: 130,
+    name,
+    bpm,
     swing: 0,
     nextId: 1,
     channels: [],
@@ -77,6 +83,11 @@ export function newSong() {
     mode: 'pattern',
     position: 0
   });
+}
+
+/** A new song: FL's starting rack (kick, clap, hat, snare) plus an 808 and keys. */
+export function newSong() {
+  const song = emptySong();
   for (const drum of ['kick', 'clap', 'hat', 'snare']) song.addChannel({ kind: 'drum', drum, kit: 'classic' });
   song.addChannel({ kind: 'synth', sound: 'b808', name: '808' });
   song.addChannel({ kind: 'synth', sound: 'pluck', name: 'Pluck' });
@@ -472,6 +483,18 @@ export function loadSong(raw) {
     pattern: ids.get(d.current?.pattern) ?? song.data.patterns[0].id,
     channel: ids.get(d.current?.channel) ?? song.data.channels[0]?.id ?? null
   };
+  // What a beat generator made: its seed, key and which channels and patterns it wrote.
+  if (d.gen && typeof d.gen === 'object' && typeof d.gen.style === 'string') {
+    const remap = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => ids.has(v)).map(([k, v]) => [k, ids.get(v)]));
+    song.data.gen = {
+      style: d.gen.style.slice(0, 20),
+      seed: num(d.gen.seed, 1),
+      key: clamp(Math.round(num(d.gen.key, 0)), 0, 11),
+      scale: typeof d.gen.scale === 'string' ? d.gen.scale.slice(0, 20) : 'phrygian',
+      roles: remap(d.gen.roles),
+      sections: remap(d.gen.sections)
+    };
+  }
   return song;
 }
 

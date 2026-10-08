@@ -2,9 +2,12 @@
  * Smoke-test a packaged PRISM: node scripts/smoke.mjs <path to PRISM.exe or prism>
  *
  * Launches the real binary, drives it over the Chrome DevTools Protocol (Node's
- * built-in WebSocket, no extra dependencies) through the Studio (circles, beat,
- * looper, undo and redo, saving and loading a loop, the piano roll), the visualizer and the oscilloscope with a built-in music track, saves
- * screenshots, and checks each Electron fuse against the attack it exists to stop.
+ * built-in WebSocket, no extra dependencies) through the Studio beatmaker (steps,
+ * beats, mixer, piano roll, undo, saving, one-click Cynmixx beats and re-rolls, the
+ * backdrop, offline export), the Live page (circles, beat, looper, undo and redo,
+ * saving and loading a loop, the piano roll), the visualizer and the oscilloscope
+ * with a built-in music track, saves screenshots, and checks each Electron fuse
+ * against the attack it exists to stop.
  * Exits non-zero on any failure.
  */
 
@@ -144,6 +147,31 @@ async function drive() {
     const savedSong = await waitFor(`(() => { const t = document.getElementById('songsNote').textContent; return t.startsWith('Saved') && t; })()`, 8000);
     check(String(savedSong).startsWith('Saved'), 'Ctrl+S saves the song (IndexedDB on prism://)', String(savedSong));
     await evaluate(`document.getElementById('songsClose').click(), true`);
+    // One click, a whole Cynmixx-type beat: arranged, in song mode, playing.
+    at = await centre('#cynmixxBtn');
+    await click(at.x, at.y);
+    const made = await waitFor(songState(`s.gen && s.gen.style === 'cynmixx' && s.mode === 'song' && s.patterns.map((x) => x.name).join('/')`), 8000);
+    check(made === 'Intro/Hook/Verse/Breakdown', '⚡ Cynmixx makes an arranged beat', String(made));
+    const going = await waitFor(`(() => { const t = document.getElementById('timeDisplay').textContent; return document.getElementById('playBtn').getAttribute('aria-label') === 'Stop' && t !== '1:1:1' && t; })()`, 8000);
+    check(!!going, 'and it plays straight away', String(going));
+    const leadNow = () => evaluate(songState(`JSON.stringify(s.patterns.find((x) => x.id === s.gen.sections.hook).notes[s.gen.roles.lead].map((n) => n.midi))`));
+    const snareNow = () => evaluate(songState(`JSON.stringify(s.patterns.find((x) => x.id === s.gen.sections.hook).notes[s.gen.roles.snare].map((n) => n.start))`));
+    const [lead0, snare0] = [await leadNow(), await snareNow()];
+    await key('KeyN', 'n', 78);
+    const rerolled = await waitFor(`${songState(`JSON.stringify(s.patterns.find((x) => x.id === s.gen.sections.hook).notes[s.gen.roles.lead].map((n) => n.midi))`)} !== ${JSON.stringify(lead0)} && 'changed'`, 5000);
+    check(rerolled === 'changed' && (await snareNow()) === snare0, 'N re-rolls the melody and keeps the drums');
+    const voidLit = await evaluate(`(() => { const c = document.getElementById('voidCanvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 2] > 60) n++; return n; })()`);
+    check(voidLit > 200, 'the data-center backdrop draws its nodes and wires', `${voidLit} lit pixels`);
+    const hood = await evaluate(`(async () => {
+      const { makeCynmixx } = await import('./js/daw/cynmixx.js');
+      const { DawEngine } = await import('./js/daw/engine.js');
+      const s = makeCynmixx({ seed: 2024 });
+      s.data.mode = 'pattern'; s.data.current.pattern = s.data.gen.sections.hook;
+      const buf = await new DawEngine(s).render('pattern', { tail: 0.5 });
+      const d = buf.getChannelData(0); let sum = 0; for (const v of d) sum += v * v;
+      return Math.sqrt(sum / d.length).toFixed(4);
+    })()`);
+    check(parseFloat(hood) > 0.12 && parseFloat(hood) < 0.6, 'the generated hook renders loud but not crushed', `${hood} rms`);
     const rendered = await evaluate(`(async () => {
       const { newSong } = await import('./js/daw/model.js');
       const { DawEngine } = await import('./js/daw/engine.js');
