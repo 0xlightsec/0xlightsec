@@ -75,7 +75,7 @@ body:has(.daw-app) { background: #010205; }
 /* --------------------------------- toolbar --------------------------------- */
 
 .toolbar {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin: 10px 10px 0; min-width: 0; white-space: nowrap;
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin: 12px 12px 0; min-width: 0; white-space: nowrap;
   border-radius: 9px; border: 1px solid var(--win-border);
   background: linear-gradient(180deg, rgba(10, 18, 30, 0.82), rgba(6, 11, 19, 0.82));
   backdrop-filter: blur(12px) saturate(1.2);
@@ -159,13 +159,16 @@ body:has(.daw-app) { background: #010205; }
 
 /* --------------------------------- windows --------------------------------- */
 
-.workspace { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 10px; padding: 10px; min-height: 0; }
+.workspace { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px; padding: 12px; min-height: 0; }
 .workspace.no-browser { grid-template-columns: minmax(0, 1fr); }
 
-/* An opaque window: a title strip, a body, and corner brackets. */
+/*
+ * A window: a glass title strip the data center glows through, an opaque body,
+ * and corner brackets. (The window's own background stops short of the strip.)
+ */
 .window {
   position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0;
-  background: var(--win); border: 1px solid var(--win-border); border-radius: 7px;
+  background: linear-gradient(180deg, transparent 30px, var(--win) 30px); border: 1px solid var(--win-border); border-radius: 7px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 22px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(140, 220, 255, 0.05);
 }
 .window::before, .window::after {
@@ -176,7 +179,8 @@ body:has(.daw-app) { background: #010205; }
 .window::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-bottom-right-radius: 7px; }
 .win-head {
   height: 30px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 11px; min-width: 0;
-  background: linear-gradient(180deg, #0e1827, #0a121e); border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(18, 34, 54, 0.55), rgba(8, 16, 28, 0.62)); border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(7px) saturate(1.4);
   border-radius: 7px 7px 0 0;
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--txt-dim); white-space: nowrap;
 }
@@ -222,7 +226,7 @@ body:has(.daw-app) { background: #010205; }
 
 /* ---------------------------- playlist and main ---------------------------- */
 
-.panes { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+.panes { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
 .pane { min-height: 0; }
 .playlist-pane { flex: 0 0 34%; min-height: 150px; }
 .playlist-pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
@@ -327,11 +331,29 @@ body:has(.daw-app) { background: #010205; }
 
 /* -------------------------------- piano roll ------------------------------- */
 
+/* FL Studio's piano roll: graphite header, a row of tool icons, the active one lit orange. */
+.roll-view .roll-head { background: linear-gradient(180deg, #2a3439, #222a2f); border-bottom: 1px solid #12181b; gap: 6px; }
+.roll-view .roll-head select { background: #1a2124; border-color: #3a464c; color: #dfe8ec; max-width: 130px; }
+.roll-view .roll-head #rollKey { width: 58px; }
+.roll-view .roll-head .seg { background: #1a2124; border-color: #3a464c; }
+.roll-view .roll-head .seg button.is-on { background: rgba(255, 159, 46, 0.16); box-shadow: inset 0 0 0 1px rgba(255, 170, 80, 0.55); color: #ffcf96; }
+.roll-view .roll-head .toggle, .roll-view .roll-head .pill { background: #1f272b; border-color: #3a464c; color: #b9c7ce; }
+.roll-view .roll-head .toggle[aria-pressed="true"] { color: #ffcf96; border-color: rgba(255, 170, 80, 0.55); background: rgba(255, 159, 46, 0.14); }
+.roll-view .roll-head .ctl-label { color: #7f9099; }
+.roll-tools { display: inline-flex; gap: 1px; padding: 2px; border-radius: 6px; background: #161c1f; border: 1px solid #39454b; }
+.roll-tools button {
+  width: 28px; height: 24px; padding: 0; border: 0; border-radius: 4px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; color: #a5b5bd; background: transparent;
+}
+.roll-tools button:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.roll-tools button.is-on { color: #ffb15c; background: linear-gradient(180deg, rgba(255, 159, 46, 0.22), rgba(255, 159, 46, 0.08)); box-shadow: inset 0 0 0 1px rgba(255, 170, 80, 0.5), 0 0 10px rgba(255, 159, 46, 0.25); }
+.roll-tools svg, .magnet svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.magnet { display: inline-flex; color: #ff9f2e; margin-left: 2px; }
 .roll-key { display: inline-flex; align-items: center; gap: 5px; }
-.roll-tip { font-size: 10px; color: var(--txt-faint); white-space: nowrap; }
+.roll-tip { font-size: 10px; color: #7f9099; white-space: nowrap; }
 .roll-view canvas { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
 .roll-head .toggle { padding: 4px 9px; }
-@media (max-width: 1360px) { .roll-tip { display: none; } }
+@media (max-width: 1640px) { .roll-tip { display: none; } }
 
 /* ---------------------------------- mixer ---------------------------------- */
 
@@ -372,11 +394,42 @@ body:has(.daw-app) { background: #010205; }
 /* ---------------------------------- keys ----------------------------------- */
 
 .daw-app .key-row {
-  margin: 0 10px 10px; padding: 8px; gap: 10px; border-radius: 7px;
+  margin: 0 12px 12px; padding: 8px; gap: 10px; border-radius: 7px;
   background: var(--win); border: 1px solid var(--win-border);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 -10px 40px rgba(0, 0, 0, 0.35);
 }
-.daw-app .key-row .keybed { height: 64px; }
+.daw-app .key-row .keybed {
+  --gap: 2px; height: 64px; padding: 5px 0 0; gap: var(--gap); border-radius: 6px;
+  background: linear-gradient(180deg, #050607, #14181b);
+  box-shadow: inset 0 4px 0 #6b1426, inset 0 5px 6px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(100, 200, 255, 0.12);
+}
+/* Ivory keys hanging from the felt, with a lip at the front that sinks when pressed. */
+.daw-app .key-row .key.white {
+  border-radius: 0 0 5px 5px; padding-bottom: 8px; gap: 2px; color: #4b5257;
+  background: linear-gradient(180deg, #d9dbd6 0%, #fbfbf8 9%, #f2f2ee 70%, #e3e3dd 100%);
+  box-shadow: inset 0 -6px 0 #c9c9c1, inset 0 -7px 0 rgba(0, 0, 0, 0.12), inset 1px 0 0 rgba(255, 255, 255, 0.8), 0 2px 3px rgba(0, 0, 0, 0.55);
+}
+.daw-app .key-row .key.white:hover { background: linear-gradient(180deg, #d9dbd6 0%, #ffffff 9%, #f7f7f3 70%, #e8e8e2 100%); }
+.daw-app .key-row .key.white.is-down {
+  transform: none;
+  background: linear-gradient(180deg, #d0c8bd 0%, #fff4e6 12%, #ffd9a8 100%);
+  box-shadow: inset 0 -2px 0 #e0a35c, inset 0 4px 6px rgba(0, 0, 0, 0.2), 0 0 18px rgba(255, 159, 46, 0.55);
+}
+.daw-app .key-row .key.black {
+  height: 62%; top: 5px; border-radius: 0 0 4px 4px; color: #a9b2b8;
+  background: linear-gradient(180deg, #0a0b0c 0%, #24282b 55%, #3a3f43 80%, #151719 82%, #0c0d0e 100%);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08), inset -1px 0 0 rgba(0, 0, 0, 0.6), 0 3px 4px rgba(0, 0, 0, 0.7);
+}
+.daw-app .key-row .key.black:hover { background: linear-gradient(180deg, #0f1112 0%, #2c3135 55%, #454b50 80%, #1b1d20 82%, #111314 100%); }
+.daw-app .key-row .key.black.is-down {
+  transform: none; color: #fff;
+  background: linear-gradient(180deg, #1a1208 0%, #8a4f12 70%, #ff9f2e 100%);
+  box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 159, 46, 0.6);
+}
+.daw-app .key-row .key .key-cap { font-size: 10px; }
+.daw-app .key-row .key.white .key-cap { color: #5b6268; }
+.daw-app .key-row .key-note { color: #8a9095; opacity: 1; }
+.daw-app .key-row.is-chords .key-note { color: #c0560f; }
 .daw-app .key-row .breakaway { width: 104px; }
 .daw-app .key-ctl { background: var(--win-2); }
 .plays { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }

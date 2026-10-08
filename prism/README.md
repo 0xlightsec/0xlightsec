@@ -36,7 +36,8 @@ Google on every launch, and that is switched off.
 PRISM opens on the **Studio**, a beatmaker laid out like FL Studio. The window
 shortcuts are FL's too. The windows are opaque panels floating over a live **data
 center**: points of light in a dark void, wired to their neighbours, with packets
-running along the wires. Every drum hit sends a pulse through it, and it breathes
+running along the wires. It glows through the windows' glass title strips and
+the gaps between them. Every drum hit sends a pulse through it, and it breathes
 with the mix.
 
 ### ⚡ One-click Cynmixx beats
@@ -102,11 +103,24 @@ drop. The panel also has Tone/Attack/Release, the mixer insert, quick fills (eve
 swing knob. **Beats** in the Browser writes a ready-made groove (Pulse to Grunge,
 and Hoodtrap) into the current pattern. In an empty song it brings its tempo too.
 
-**Piano Roll.**
-- **Draw:** click to draw at the last note's length; with **Chords** on, a click
-  draws the whole chord that fits the key.
-- **Edit:** drag to move, drag a note's end to resize, right-click (or right-drag)
-  to delete.
+**Piano Roll.** It looks and works like FL Studio's:
+- **Look:** a real keyboard runs down the side, and its keys light up as the notes
+  play. The grid is slate, with the scale's rows lit. Notes are bevelled green
+  blocks labelled with their names and shaded by velocity; they turn red when
+  selected and grey when muted. An orange marker shows the song position.
+- **Tools** (the icons in its header):
+
+  | tool | what it does |
+  |---|---|
+  | **Draw** | click to draw at the last note's length; drag a note to move it, or its end to stretch it |
+  | **Paint** | drag along to lay a note every note-length |
+  | **Delete** | click or drag over notes |
+  | **Mute** | silence notes but keep them (click again to bring them back) |
+  | **Slice** | drag a line down through notes to cut them there |
+  | **Select** | drag a box, then drag the selection |
+
+  With **Chords** on, drawing and painting lay the whole chord that fits the key.
+- **Edit:** right-click (or right-drag) deletes in any tool.
 - **Select:** `Ctrl`+drag box-selects and `Shift`+click adds to the selection.
   `Ctrl+A`, `Ctrl+C`, `Ctrl+X` and `Ctrl+V` work as usual; `Ctrl+B` duplicates
   onto the next beat or bar; `Delete` removes the selection.
@@ -115,8 +129,8 @@ and Hoodtrap) into the current pattern. In an empty song it brings its tempo too
 - **Velocity:** the lane underneath sets it, for a chord or the whole selection.
 - **Help:** other channels show as faint ghost notes, and rows in the chosen key and
   scale are lit. The scales are major, minor, Phrygian, harmonic minor and Phrygian
-  dominant. Snap goes from 1/4 to 1/32; `Ctrl`+wheel zooms and `Shift`+wheel
-  scrolls.
+  dominant. Snap goes from 1/4 to 1/32. `Ctrl`+wheel zooms time, `Alt`+wheel zooms
+  the rows and `Shift`+wheel scrolls.
 
 **Playlist.** Click to place the current pattern, drag to move it (`Alt` for beats
 instead of bars), drag a clip's end to stretch it, and the pattern repeats.
@@ -167,7 +181,8 @@ the same instruments and mixer, so the file sounds exactly like playback.
 `.prismbeat` file, delete, or start a new one. The song you're working on is also
 kept between sessions automatically.
 
-**The keyboard** at the bottom plays the selected channel, as before: `A`…`'` and
+**The keyboard** at the bottom (ivory and ebony keys on a felt strip) plays the
+selected channel, as before: `A`…`'` and
 `W E T Y U O P`, `Z`/`X` for the octave, `C` for chords, and **Breakaway** (`Esc`)
 hands the keyboard back. The Browser's corner shows the beat as light: one circle
 follows the melody (its notes set the petals), the other the drums.
@@ -471,7 +486,7 @@ tests/theory.test.mjs   npm test
 consonant-collapses / dissonant-spreads colour behaviour, chord naming, the just
 ratios, the piano tuning curve, that each figure spins at its real beat rate, and
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
-beatmaker's song model (steps and notes, pattern and song playback, loops and
+beatmaker's song model (steps and notes, muted notes, pattern and song playback, loops and
 clip repeats, beats, undo, loading untrusted files), MIDI file reading and writing,
 the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
 on it, every melodic note in the Phrygian key, the octave-up hook, slides, re-rolls

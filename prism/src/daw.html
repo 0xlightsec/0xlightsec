@@ -139,7 +139,16 @@
 
         <div class="view roll-view" id="rollView" hidden>
           <header class="roll-head">
+            <div class="roll-tools" id="rollTools" role="toolbar" aria-label="Tools">
+              <button data-tool="draw" title="Draw: click to draw, drag a note to move it, drag its end to stretch it" aria-label="Draw"><svg viewBox="0 0 16 16"><path d="M2.5 13.5l.9-3.6L10.8 2.5l2.7 2.7-7.4 7.4z"/><path d="M9.3 4l2.7 2.7"/></svg></button>
+              <button data-tool="paint" title="Paint: drag to lay notes as you go, one every note-length" aria-label="Paint"><svg viewBox="0 0 16 16"><path d="M13.8 1.8L8 8.6l-.6 1.4 1.4-.6 6.8-5.8"/><path d="M6.9 10.4c-1.9-.6-3.4.5-3.6 2.2-.1.9-.7 1.5-1.6 1.7 2.6 1 5.3.3 5.9-1.6"/></svg></button>
+              <button data-tool="erase" title="Delete: click or drag over notes (right-click deletes in any tool)" aria-label="Delete"><svg viewBox="0 0 16 16"><path d="M6.2 13.5H14"/><path d="M2.4 9.6l6.7-6.7 4.3 4.3-6.3 6.3H5.3z"/><path d="M5.6 6.4l4.3 4.3"/></svg></button>
+              <button data-tool="mute" title="Mute: click notes to silence them, again to bring them back" aria-label="Mute"><svg viewBox="0 0 16 16"><path d="M2 6.2h2.6L8.2 3v10L4.6 9.8H2z"/><path d="M10.6 6.2l3.6 3.6M14.2 6.2l-3.6 3.6"/></svg></button>
+              <button data-tool="slice" title="Slice: drag a line down through notes to cut them there" aria-label="Slice"><svg viewBox="0 0 16 16"><path d="M8 1.5v13" stroke-dasharray="2 1.6"/><path d="M4.5 4.5L8 1.5l3.5 3"/></svg></button>
+              <button data-tool="select" title="Select: drag a box; drag the selection to move it" aria-label="Select"><svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1" stroke-dasharray="2.2 1.6"/></svg></button>
+            </div>
             <select id="rollChannel" aria-label="Channel"></select>
+            <span class="magnet" title="Snap" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M4 2.5v5a4 4 0 008 0v-5"/><path d="M4 5h3M9 5h3"/></svg></span>
             <div class="seg roll-seg" id="rollSnap" aria-label="Snap"></div>
             <label class="roll-key"><span class="ctl-label">Key</span><select id="rollKey" aria-label="Key"></select><select id="rollScale" aria-label="Scale"></select></label>
             <button class="toggle" id="rollChords" aria-pressed="false" title="Draw and play whole chords in the key (C)">Chords</button>
@@ -147,7 +156,7 @@
             <button class="toggle" id="recQuantize" aria-pressed="true" title="Snap recorded notes to the grid">Rec snap</button>
             <span class="spacer"></span>
             <button class="pill" id="rollQuantize" title="Move every note of this channel onto the grid">Quantize</button>
-            <span class="roll-tip">Ctrl+drag selects · Ctrl+C / V / B · Del · ↑↓ ←→</span>
+            <span class="roll-tip">Ctrl+drag selects · Ctrl+C / V / B · Del · ↑↓ ←→ · Alt+wheel zooms</span>
           </header>
           <canvas id="rollCanvas"></canvas>
         </div>

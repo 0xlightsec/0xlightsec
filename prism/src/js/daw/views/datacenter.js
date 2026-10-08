@@ -214,7 +214,7 @@ export class DataCenter {
       path.lineTo(q.x, q.y);
     }
     paths.forEach((levels, hot) => levels.forEach((path, level) => {
-      g.strokeStyle = rgba(hot ? MAGENTA : CYAN, 0.05 + (0.16 * (level + 0.5)) / BUCKETS + this.pulse * 0.06);
+      g.strokeStyle = rgba(hot ? MAGENTA : CYAN, 0.07 + (0.24 * (level + 0.5)) / BUCKETS + this.pulse * 0.08);
       g.stroke(path);
     }));
 

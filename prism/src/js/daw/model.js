@@ -4,7 +4,8 @@
  *   channels   instruments in the Channel Rack: a synth sound or a drum, each with
  *              volume, pan, mute/solo and the mixer insert it plays through
  *   patterns   per channel, notes on a grid of sixteenth steps; a pattern loops
- *              every 1–16 bars. Steps and piano-roll notes are the same notes.
+ *              every 1–16 bars. Steps and piano-roll notes are the same notes; a
+ *              muted note stays in the pattern but doesn't play.
  *   playlist   pattern clips placed on tracks along a timeline of bars: the song
  *   mixer      the master and inserts, each with a fader, pan and effects
  *
@@ -246,7 +247,7 @@ export class Song {
     return p.notes[channelId];
   }
 
-  addNote(patternId, channelId, { start, length = 1, midi = ROOT, velocity = 0.8 }) {
+  addNote(patternId, channelId, { start, length = 1, midi = ROOT, velocity = 0.8, muted = false }) {
     const note = {
       id: this.id('n'),
       start: Math.max(0, num(start, 0)),
@@ -254,6 +255,7 @@ export class Song {
       midi: clamp(Math.round(num(midi, ROOT)), NOTE_LOW, NOTE_HIGH),
       velocity: clamp(num(velocity, 0.8), 0.05, 1)
     };
+    if (muted === true) note.muted = true; // shown in the piano roll, never played
     this.notes(patternId, channelId).push(note);
     return note;
   }
@@ -517,7 +519,7 @@ export function eventsBetween(song, mode, s0, s1) {
     for (let k = k0; k <= k1; k++) {
       for (const [channel, list] of Object.entries(p.notes)) {
         for (const note of list) {
-          if (note.start >= period) continue;
+          if (note.start >= period || note.muted) continue;
           const step = k * period + note.start;
           if (step >= s0 && step < s1) out.push({ channel, note, step, room: Infinity });
         }
@@ -539,7 +541,7 @@ export function eventsBetween(song, mode, s0, s1) {
         for (let r = r0; base + r * pl < Math.min(end, s1); r++) {
           for (const [channel, list] of Object.entries(p.notes)) {
             for (const note of list) {
-              if (note.start >= pl) continue;
+              if (note.start >= pl || note.muted) continue;
               const step = base + r * pl + note.start;
               if (step >= end) continue;
               if (step >= s0 && step < s1) out.push({ channel, note, step, room: end - step });

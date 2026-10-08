@@ -23,7 +23,7 @@ import { newSong, loadSong, eventsBetween, formatPosition, STEPS_PER_BAR, ROOT, 
 import { DawEngine } from './engine.js';
 import { encodeMidi, decodeMidi } from './midi-file.js';
 import { ChannelRack } from './views/rack.js';
-import { PianoRoll } from './views/piano-roll.js';
+import { PianoRoll, TOOLS } from './views/piano-roll.js';
 import { Playlist } from './views/playlist.js';
 import { MixerView } from './views/mixer-view.js';
 import { Browser } from './views/browser.js';
@@ -57,6 +57,7 @@ const ui = {
   snap: 1,
   key: 0,
   scale: 'major',
+  rollTool: 'draw',
   chords: false,
   ghosts: true,
   recQuantize: true,
@@ -214,6 +215,7 @@ const roll = new PianoRoll($('rollCanvas'), studio, {
   chordFor: (midi) => chordFor(midi, ui.key, ui.scale),
   ghosts: () => ui.ghosts
 });
+roll.tool = TOOLS.includes(ui.rollTool) ? ui.rollTool : 'draw';
 const playlist = new Playlist($('playlistCanvas'), studio);
 const mixer = new MixerView($('mixerView'), studio);
 const browser = new Browser($('browserList'), studio);
@@ -292,6 +294,7 @@ function renderRollHead() {
   }
   sel.value = song.data.current.channel ?? '';
   for (const b of $('rollSnap').children) b.classList.toggle('is-on', Number(b.dataset.snap) === ui.snap);
+  for (const b of $('rollTools').children) b.classList.toggle('is-on', b.dataset.tool === roll.tool);
   $('rollKey').value = String(ui.key);
   $('rollScale').value = ui.scale;
   $('rollChords').setAttribute('aria-pressed', String(ui.chords));
@@ -489,7 +492,7 @@ function makeBeat(keepTempo = false) {
   Object.assign(ui, { key, scale: 'phrygian', kit: 'hood', songId: null, playlist: true });
   saveUi();
   roll.selected.clear();
-  roll.scroll = null;
+  roll.reveal();
   layout();
   renderAll();
   browser.render();
@@ -1184,6 +1187,13 @@ function wire() {
     roll.reveal();
     e.target.blur();
   });
+  for (const b of $('rollTools').children) {
+    b.addEventListener('click', () => {
+      roll.tool = ui.rollTool = b.dataset.tool;
+      saveUi();
+      renderRollHead();
+    });
+  }
   $('rollChords').addEventListener('click', () => setChords(!ui.chords));
   $('chordBtn').addEventListener('click', () => setChords(!ui.chords));
   $('rollGhosts').addEventListener('click', () => {

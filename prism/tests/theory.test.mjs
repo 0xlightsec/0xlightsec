@@ -771,6 +771,18 @@ check('a saved song loads back the same; nonsense is cleaned up, not trusted', (
   assert.equal(junk.currentPattern.bars, 1); assert.equal(junk.notes(junk.currentPattern.id, junk.channels[0].id)[0].midi, daw.NOTE_HIGH);
   assert.throws(() => daw.loadSong('{"hello":1}'), /not a PRISM song/);
 });
+check('a muted note stays in the pattern but never plays or exports, and survives a save', () => {
+  const s = daw.newSong(); const p = s.currentPattern.id, k = s.channels[4].id;
+  s.addNote(p, k, { start: 0, length: 2, midi: 48 });
+  s.addNote(p, k, { start: 4, length: 2, midi: 50, muted: true });
+  assert.deepEqual(daw.eventsBetween(s, 'pattern', 0, 16).map((e) => e.note.midi), [48]);
+  s.addClip({ track: 0, pattern: p, start: 0 });
+  assert.deepEqual(daw.eventsBetween(s, 'song', 0, 16).map((e) => e.note.midi), [48]);
+  const back = daw.loadSong(JSON.stringify(s.toJSON()));
+  const notes = back.notes(back.currentPattern.id, back.channels[4].id);
+  assert.deepEqual(notes.map((n) => [n.midi, !!n.muted]), [[48, false], [50, true]]);
+  assert.ok(!('muted' in notes[0]), 'unmuted notes carry no flag');
+});
 check('swing pushes every second sixteenth; positions read bar:beat:step', () => {
   assert.equal(daw.swingOffset(1, 0.5), 0.25); assert.equal(daw.swingOffset(2, 0.5), 0); assert.equal(daw.swingOffset(1.5, 0.5), 0);
   assert.equal(daw.formatPosition(0), '1:1:1'); assert.equal(daw.formatPosition(21), '2:2:2');
