@@ -170,24 +170,33 @@
     </div>
   </main>
 
-  <section class="key-row" id="keyRow">
-    <div class="key-ctl">
-      <button class="toggle" id="chordBtn" aria-pressed="false" title="Each key plays a whole chord that fits the key (C)">Chords <kbd>C</kbd></button>
-      <div class="key-ctl-row"><span class="ctl-label">Oct <kbd>Z</kbd><kbd>X</kbd></span><div class="stepper small"><button id="octDown" aria-label="Octave down">−</button><span id="octValue">C4</span><button id="octUp" aria-label="Octave up">+</button></div></div>
-      <div class="key-ctl-row"><span class="ctl-label">Plays</span><span class="plays" id="playsName">—</span></div>
+  <section class="key-row window" id="keyRow" aria-label="Keyboard">
+    <div class="kb-grip" id="kbGrip" title="Drag to make the keyboard taller or shorter (double-click: back to normal)"></div>
+    <header class="win-head kb-head">
+      <span class="win-title"><i class="win-led"></i>Keyboard</span>
+      <span class="win-meta">plays <b class="plays" id="playsName">—</b></span>
+      <span class="win-meta kb-range" id="kbRange"></span>
+      <span class="spacer"></span>
+      <button class="toggle kb-chords" id="chordBtn" aria-pressed="false" title="Each key plays a whole chord that fits the key (C)">Chords <kbd>C</kbd></button>
+      <button class="kb-capture" id="breakawayKey" data-state="captured" title="Esc hands the computer keyboard back; Enter takes it again">
+        <i class="dot"></i><span id="breakawayTitle">Keys on</span><span class="kb-sub" id="breakawaySub"></span><kbd id="breakawayKbd">esc</kbd>
+      </button>
+      <button class="win-x kb-min" id="kbMin" title="Minimise the keyboard" aria-label="Minimise the keyboard" aria-expanded="true">▾</button>
+    </header>
+    <div class="kb-body">
+      <div class="kb-main">
+        <div class="kb-overview" id="kbOverview" title="The whole piano: drag along it to choose which keys you see and play (Z / X move an octave)">
+          <canvas id="kbOverviewCanvas"></canvas>
+        </div>
+        <div class="keybed" id="keybed"></div>
+      </div>
+      <div class="pads" aria-label="Performance pads: hold them">
+        <span class="ctl-label">Pads · hold</span>
+        <button class="pad" data-pad="stutter2" title="Hold: repeat the last eighth, in time (Q)">Stutter ⅛ <kbd>Q</kbd></button>
+        <button class="pad" data-pad="stutter1" title="Hold: repeat the last sixteenth, in time (B)">Stutter <small>1/16</small> <kbd>B</kbd></button>
+        <button class="pad" data-pad="tape" title="Hold: the whole mix winds down like a turntable losing power (V)">Tape stop <kbd>V</kbd></button>
+      </div>
     </div>
-    <div class="keybed" id="keybed"></div>
-    <div class="pads" aria-label="Performance pads: hold them">
-      <span class="ctl-label">Pads · hold</span>
-      <button class="pad" data-pad="stutter2" title="Hold: repeat the last eighth, in time (Q)">Stutter ⅛ <kbd>Q</kbd></button>
-      <button class="pad" data-pad="stutter1" title="Hold: repeat the last sixteenth, in time (B)">Stutter <small>1/16</small> <kbd>B</kbd></button>
-      <button class="pad" data-pad="tape" title="Hold: the whole mix winds down like a turntable losing power (V)">Tape stop <kbd>V</kbd></button>
-    </div>
-    <button class="breakaway" id="breakawayKey" data-state="captured">
-      <span class="breakaway-title" id="breakawayTitle">Breakaway</span>
-      <span class="breakaway-sub" id="breakawaySub">release keyboard</span>
-      <kbd id="breakawayKbd">esc</kbd>
-    </button>
   </section>
 
   <aside class="library" id="songs" hidden>

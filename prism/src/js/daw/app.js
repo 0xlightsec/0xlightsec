@@ -32,7 +32,8 @@ import { makeCynmixx, applyMelody, applyDrums, isGenerated } from './cynmixx.js'
 import { saveSong, listSongs, loadSongData, deleteSong } from './songs-db.js';
 import { KEY_NAMES, SCALES, chordFor, chordName, inScale } from '../studio/sounds.js';
 import { BEATS } from '../studio/drums.js';
-import { KeyboardInstrument, WHITE_KEYS, BLACK_KEYS } from '../io/keyboard.js';
+import { KeyboardInstrument } from '../io/keyboard.js';
+import { PianoKeys, HEIGHT_DEFAULT } from './views/piano-keys.js';
 import { MidiInput } from '../io/midi.js';
 import { wireWindowChrome, renderFocusBadge, trackFocus } from '../chrome.js';
 import { encodeWav } from '../scope/tracks.js';
@@ -63,6 +64,8 @@ const ui = {
   recQuantize: true,
   metronome: false,
   octave: 4,
+  kbHeight: window.innerHeight < 820 ? 92 : HEIGHT_DEFAULT, // a little shorter on a short screen
+  kbMin: false,
   volume: 0.8,
   kit: 'classic',
   songId: null,
@@ -542,6 +545,7 @@ function renderPads() {
 
 /* -------------------------------- live play -------------------------------- */
 
+let piano = null; // the on-screen keyboard, made below
 const keys = new KeyboardInstrument({
   onNoteOn: (m, v, code) => playLive(code, song.data.current.channel, m, v),
   onNoteOff: (_m, code) => engine.liveOff(code),
@@ -560,69 +564,95 @@ function playLive(id, channelId, midi, velocity) {
   engine.liveOn(id, ch.id, notes, velocity);
 }
 
+const midiHeld = new Set();
 const midi = new MidiInput({
   onNoteOn: (m, v, info) => {
     // Pads on channel 10 play the drum channel for that drum; everything else plays the selected channel.
     const drum = info?.channel === 9 ? GM_TO_DRUM.get(m) : null;
     const target = drum ? song.channels.find((c) => c.kind === 'drum' && c.drum === drum) : null;
     if (target) engine.liveOn(`midi:${m}`, target.id, [ROOT], v);
-    else playLive(`midi:${m}`, song.data.current.channel, m, v);
+    else {
+      playLive(`midi:${m}`, song.data.current.channel, m, v);
+      midiHeld.add(m);
+      showHeld();
+    }
   },
-  onNoteOff: (m) => engine.liveOff(`midi:${m}`),
+  onNoteOff: (m) => {
+    engine.liveOff(`midi:${m}`);
+    if (midiHeld.delete(m)) showHeld();
+  },
   onSustain: () => {}
 });
 
-function buildKeybed() {
-  const bed = $('keybed');
-  bed.innerHTML = '';
-  const make = (key, kind) => {
-    const b = document.createElement('button');
-    b.className = `key ${kind}`;
-    b.dataset.code = key.code;
-    b.tabIndex = -1;
-    b.innerHTML = `<span class="key-cap">${key.label}</span><span class="key-note"></span>`;
-    if (kind === 'black') b.style.setProperty('--after', String(key.after));
-    b.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      b.setPointerCapture(e.pointerId);
+/* --------------------------------- the piano -------------------------------- */
+
+let mouseHeld = null;
+piano = new PianoKeys(
+  { row: $('keyRow'), bed: $('keybed'), overview: $('kbOverview'), canvas: $('kbOverviewCanvas'), grip: $('kbGrip') },
+  {
+    octave: () => keys.octave,
+    setOctave: (n) => keys.setOctave(n),
+    play: (m) => {
       engine.start();
-      keys.pressVirtual(key.code);
-    });
-    const release = () => keys.releaseVirtual(key.code);
-    b.addEventListener('pointerup', release);
-    b.addEventListener('pointercancel', release);
-    b.addEventListener('lostpointercapture', release);
-    bed.appendChild(b);
-  };
-  WHITE_KEYS.forEach((k) => make(k, 'white'));
-  BLACK_KEYS.forEach((k) => make(k, 'black'));
+      mouseHeld = m;
+      playLive(`mouse:${m}`, song.data.current.channel, m, keys.velocity);
+      showHeld();
+    },
+    stop: (m) => {
+      engine.liveOff(`mouse:${m}`);
+      if (mouseHeld === m) mouseHeld = null;
+      showHeld();
+    },
+    // The computer keyboard's keys show their note (or chord); every C is named.
+    label: (m, mapped) => {
+      if (mapped && ui.chords) return chordName(chordFor(m, ui.key, ui.scale));
+      if (m % 12 === 0) return noteName(m);
+      return mapped ? noteName(m).replace(/-?\d+$/, '') : '';
+    },
+    height: ui.kbHeight,
+    onHeight: (px) => {
+      ui.kbHeight = px;
+      saveUi();
+    },
+    onLayout: ({ start, end }) => ($('kbRange').textContent = `${noteName(start)} – ${noteName(end)} · Z X shift`)
+  }
+);
+
+/** Light every key being played, however it's played. */
+function showHeld() {
+  if (!piano) return;
+  const held = new Set([...keys.down.values(), ...midiHeld]);
+  if (mouseHeld !== null) held.add(mouseHeld);
+  piano.setHeld(held);
+}
+
+function setKeyboardMin(min) {
+  ui.kbMin = min;
+  saveUi();
+  $('keyRow').classList.toggle('is-min', min);
+  $('kbMin').textContent = min ? '▴' : '▾';
+  $('kbMin').title = min ? 'Show the keyboard' : 'Minimise the keyboard';
+  $('kbMin').setAttribute('aria-expanded', String(!min));
+  if (!min) requestAnimationFrame(() => piano.layout(true));
 }
 
 function refreshKeyLabels() {
-  for (const b of document.querySelectorAll('#keybed .key')) {
-    const m = keys.midiFor(b.dataset.code);
-    const label = b.querySelector('.key-note');
-    if (m === null) {
-      label.textContent = '';
-      continue;
-    }
-    label.textContent = ui.chords ? chordName(chordFor(m, ui.key, ui.scale)) : noteName(m).replace(/-?\d+$/, '');
-  }
-  $('octValue').textContent = `C${keys.octave}`;
+  piano?.refresh();
   $('keyRow').classList.toggle('is-chords', ui.chords);
 }
 
 function renderKeyState(state) {
   renderFocusBadge(state);
-  for (const b of document.querySelectorAll('#keybed .key')) b.classList.toggle('is-down', state.down.has(b.dataset.code));
+  showHeld();
   $('breakawayKey').dataset.state = state.captured ? 'captured' : 'released';
-  $('breakawayTitle').textContent = state.captured ? 'Breakaway' : 'Re-arm';
-  $('breakawaySub').textContent = state.captured ? 'release keyboard' : 'keyboard is yours';
+  $('breakawayTitle').textContent = state.captured ? 'Keys on' : 'Keys off';
+  $('breakawaySub').textContent = state.captured ? '' : ' · the keyboard is yours';
   $('breakawayKbd').textContent = state.captured ? 'esc' : 'enter';
   $('keyRow').classList.toggle('is-released', !state.captured);
   if (state.octave !== ui.octave) {
     ui.octave = state.octave;
     saveUi();
+    piano?.layout();
     refreshKeyLabels();
   }
 }
@@ -1210,9 +1240,8 @@ function wire() {
     for (const n of song.notes(song.currentPattern.id, song.data.current.channel)) n.start = Math.max(0, Math.round(n.start / ui.snap) * ui.snap);
   }));
 
-  $('octDown').addEventListener('click', () => keys.setOctave(keys.octave - 1));
-  $('octUp').addEventListener('click', () => keys.setOctave(keys.octave + 1));
   $('breakawayKey').addEventListener('click', () => keys.toggleCapture());
+  $('kbMin').addEventListener('click', () => setKeyboardMin(!ui.kbMin));
   $('startBtn').addEventListener('click', () => engine.start());
   wireShortcuts();
 }
@@ -1220,7 +1249,8 @@ function wire() {
 /* ---------------------------------- start ---------------------------------- */
 
 wireWindowChrome();
-buildKeybed();
+setKeyboardMin(ui.kbMin);
+piano.layout(true);
 wire();
 layout();
 renderAll();

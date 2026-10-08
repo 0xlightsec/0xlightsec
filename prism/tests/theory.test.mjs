@@ -918,6 +918,25 @@ check('the Hood group, the hood kit, the new drums and the Hoodtrap beat are all
   assert.equal(drums.BEATS.hoodtrap.kit, 'hood');
   assert.equal(drums.BEATS.hoodtrap.snare.indexOf('x'), 0);
 });
+const pianoKeys = await import('../src/js/daw/views/piano-keys.js');
+check('the on-screen piano: as many octaves as fit, always showing the keys the computer keyboard plays, never past the piano', () => {
+  assert.equal(pianoKeys.octavesFor(500), 2); assert.equal(pianoKeys.octavesFor(800), 3); assert.equal(pianoKeys.octavesFor(2400), 5);
+  for (const span of [2, 3, 4, 5]) {
+    for (let octave = 1; octave <= 6; octave++) {
+      const { start, end } = pianoKeys.keyRange(octave, span);
+      const c = (octave + 1) * 12;
+      assert.equal(start % 12, 0, 'starts on a C'); assert.equal(end - start, span * 12);
+      assert.ok(end <= pianoKeys.PIANO_HIGH, `${span}/${octave}: ends by C8`);
+      if (c + 17 <= pianoKeys.PIANO_HIGH && c >= 12) assert.ok(start <= c && c + (span >= 3 ? 17 : 12) <= end, `${span}/${octave}: A … ' in view`);
+    }
+  }
+  // Dragging the whole-piano slider to a note centres the window there.
+  for (const span of [3, 5]) {
+    const o = pianoKeys.octaveCentredOn(60, span);
+    const { start, end } = pianoKeys.keyRange(o, span);
+    assert.ok(Math.abs((start + end) / 2 - 60) <= 6, `${span}: centred on middle C`);
+  }
+});
 check('Clip: unity below the knee, flat at the ceiling, nothing at zero', () => {
   assert.equal(fx.clipCurve(0), null);
   const c = fx.clipCurve(1, 1025);

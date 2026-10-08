@@ -393,51 +393,104 @@ body:has(.daw-app) { background: #010205; }
 
 /* ---------------------------------- keys ----------------------------------- */
 
+/*
+ * The keyboard is a window too: a glass title strip with its few settings, a
+ * grip on its top edge to make it taller or shorter (--kb-h, set by the app),
+ * the whole-piano slider, and the keys.
+ */
 .daw-app .key-row {
-  margin: 0 12px 12px; padding: 8px; gap: 10px; border-radius: 7px;
-  background: var(--win); border: 1px solid var(--win-border);
+  position: relative; display: flex; flex-direction: column; gap: 0; padding: 0;
+  margin: 0 12px 12px; border-radius: 7px; background: linear-gradient(180deg, transparent 30px, var(--win) 30px);
+  border: 1px solid var(--win-border);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 -10px 40px rgba(0, 0, 0, 0.35);
 }
+.daw-app .key-row.is-resizing { user-select: none; }
+.kb-grip { position: absolute; top: -7px; left: 0; right: 0; height: 12px; z-index: 4; cursor: ns-resize; touch-action: none; }
+.kb-grip::after {
+  content: ''; position: absolute; left: 50%; top: 4px; width: 56px; height: 4px; margin-left: -28px; border-radius: 2px;
+  background: rgba(63, 230, 255, 0.35); box-shadow: 0 0 8px rgba(63, 230, 255, 0.4); transition: background 0.15s, width 0.15s, margin 0.15s;
+}
+.kb-grip:hover::after, .key-row.is-resizing .kb-grip::after { width: 90px; margin-left: -45px; background: #3fe6ff; }
+.kb-head { gap: 10px; }
+.kb-head .win-meta b.plays { font-family: var(--sans); font-size: 11px; letter-spacing: 0.02em; text-transform: none; max-width: 160px; display: inline-block; vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
+.kb-range { color: var(--txt-dim); }
+.kb-chords { padding: 2px 8px; min-height: 22px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.kb-capture {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+  color: #4ff0b0; background: rgba(79, 240, 176, 0.06); border: 1px solid rgba(79, 240, 176, 0.3);
+}
+.kb-capture .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; }
+.kb-capture kbd { font-size: 8px; padding: 1px 4px; }
+.kb-capture[data-state="released"] { color: #ffc46b; background: rgba(255, 196, 107, 0.08); border-color: rgba(255, 196, 107, 0.35); }
+.kb-sub { text-transform: none; letter-spacing: 0; }
+.kb-min { font-size: 11px; }
+.key-row.is-min { background: transparent; }
+.key-row.is-min .kb-body, .key-row.is-min .kb-grip { display: none; }
+.key-row.is-min .kb-head { border-radius: 7px; border-bottom: 0; }
+
+.kb-body { display: flex; gap: 10px; align-items: stretch; padding: 8px 10px 10px; min-width: 0; }
+.kb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.kb-overview {
+  position: relative; height: 20px; flex: none; border-radius: 4px; overflow: hidden; cursor: ew-resize; touch-action: none;
+  background: #0b0e10; border: 1px solid var(--line);
+}
+.kb-overview.is-dragging { cursor: grabbing; }
+.kb-overview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Ivory and ebony keys hanging from a red felt strip; the front lip sinks when pressed. */
 .daw-app .key-row .keybed {
-  --gap: 2px; height: 64px; padding: 5px 0 0; gap: var(--gap); border-radius: 6px;
+  --gap: 2px;
+  --kw: calc((100% - (var(--whites, 15) - 1) * var(--gap)) / var(--whites, 15));
+  --bw: calc(var(--kw) * 0.62);
+  flex: none; height: var(--kb-h, 116px); padding: 6px 0 0; gap: var(--gap); border-radius: 6px;
   background: linear-gradient(180deg, #050607, #14181b);
-  box-shadow: inset 0 4px 0 #6b1426, inset 0 5px 6px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(100, 200, 255, 0.12);
+  box-shadow: inset 0 5px 0 #6b1426, inset 0 6px 6px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(100, 200, 255, 0.12);
+  touch-action: none;
 }
-/* Ivory keys hanging from the felt, with a lip at the front that sinks when pressed. */
+.daw-app .key-row .key { gap: 4px; }
 .daw-app .key-row .key.white {
-  border-radius: 0 0 5px 5px; padding-bottom: 8px; gap: 2px; color: #4b5257;
-  background: linear-gradient(180deg, #d9dbd6 0%, #fbfbf8 9%, #f2f2ee 70%, #e3e3dd 100%);
-  box-shadow: inset 0 -6px 0 #c9c9c1, inset 0 -7px 0 rgba(0, 0, 0, 0.12), inset 1px 0 0 rgba(255, 255, 255, 0.8), 0 2px 3px rgba(0, 0, 0, 0.55);
+  border-radius: 0 0 6px 6px; padding-bottom: 12px; color: #4b5257;
+  background: linear-gradient(180deg, #c9ccc7 0%, #f6f6f2 7%, #fbfbf8 40%, #ecece6 92%, #dcdcd5 100%);
+  box-shadow: inset 0 -9px 0 #cfcfc7, inset 0 -10px 0 rgba(0, 0, 0, 0.1), inset 1px 0 0 rgba(255, 255, 255, 0.9), inset -1px 0 0 rgba(0, 0, 0, 0.08), 0 3px 4px rgba(0, 0, 0, 0.6);
 }
-.daw-app .key-row .key.white:hover { background: linear-gradient(180deg, #d9dbd6 0%, #ffffff 9%, #f7f7f3 70%, #e8e8e2 100%); }
+.daw-app .key-row .key.white:hover { background: linear-gradient(180deg, #cdd0cb 0%, #fbfbf9 7%, #ffffff 40%, #f1f1ec 92%, #e1e1da 100%); }
 .daw-app .key-row .key.white.is-down {
   transform: none;
-  background: linear-gradient(180deg, #d0c8bd 0%, #fff4e6 12%, #ffd9a8 100%);
-  box-shadow: inset 0 -2px 0 #e0a35c, inset 0 4px 6px rgba(0, 0, 0, 0.2), 0 0 18px rgba(255, 159, 46, 0.55);
+  background: linear-gradient(180deg, #c8bfb2 0%, #fff4e6 10%, #ffe3bf 60%, #ffc982 100%);
+  box-shadow: inset 0 -3px 0 #e0a35c, inset 0 5px 8px rgba(0, 0, 0, 0.22), 0 0 22px rgba(255, 159, 46, 0.6);
 }
 .daw-app .key-row .key.black {
-  height: 62%; top: 5px; border-radius: 0 0 4px 4px; color: #a9b2b8;
-  background: linear-gradient(180deg, #0a0b0c 0%, #24282b 55%, #3a3f43 80%, #151719 82%, #0c0d0e 100%);
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08), inset -1px 0 0 rgba(0, 0, 0, 0.6), 0 3px 4px rgba(0, 0, 0, 0.7);
+  height: 63%; top: 6px; border-radius: 0 0 5px 5px; color: #a9b2b8; padding-bottom: 8px;
+  background: linear-gradient(180deg, #08090a 0%, #1f2326 50%, #3b4044 84%, #16181a 87%, #0b0c0d 100%);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.1), inset -1px 0 0 rgba(0, 0, 0, 0.6), 0 4px 6px rgba(0, 0, 0, 0.75);
 }
-.daw-app .key-row .key.black:hover { background: linear-gradient(180deg, #0f1112 0%, #2c3135 55%, #454b50 80%, #1b1d20 82%, #111314 100%); }
+.daw-app .key-row .key.black:hover { background: linear-gradient(180deg, #0d0f10 0%, #282d31 50%, #474d52 84%, #1c1f22 87%, #101213 100%); }
 .daw-app .key-row .key.black.is-down {
   transform: none; color: #fff;
-  background: linear-gradient(180deg, #1a1208 0%, #8a4f12 70%, #ff9f2e 100%);
-  box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 159, 46, 0.6);
+  background: linear-gradient(180deg, #1a1208 0%, #7a4510 60%, #ff9f2e 100%);
+  box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.6), 0 0 18px rgba(255, 159, 46, 0.65);
 }
-.daw-app .key-row .key .key-cap { font-size: 10px; }
-.daw-app .key-row .key.white .key-cap { color: #5b6268; }
-.daw-app .key-row .key-note { color: #8a9095; opacity: 1; }
-.daw-app .key-row.is-chords .key-note { color: #c0560f; }
-.daw-app .key-row .breakaway { width: 104px; }
-.daw-app .key-ctl { background: var(--win-2); }
-.plays { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+/* The computer keyboard's letters sit on their keys as little caps; every C is named. */
+.daw-app .key-row .key-cap:empty { display: none; }
+.daw-app .key-row .key .key-cap {
+  font-size: 10px; line-height: 1; padding: 2px 5px; border-radius: 3px; min-width: 16px; text-align: center;
+}
+.daw-app .key-row .key.white .key-cap { color: #39414a; background: rgba(0, 0, 0, 0.06); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14); }
+.daw-app .key-row .key.black .key-cap { color: #d4dbe0; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.daw-app .key-row .key-note { color: #8a9095; opacity: 1; font-size: 9px; }
+.daw-app .key-row .key.black .key-note { display: block; color: #8d969c; font-size: 8px; }
+.daw-app .key-row .key.white.is-c .key-note { color: #3c454c; font-weight: 700; }
+.daw-app .key-row .key.is-down .key-note { color: #6b3b06; }
+.daw-app .key-row.is-chords .key.is-mapped .key-note { color: #c0560f; font-weight: 700; }
+.daw-app .key-row.is-released .keybed { opacity: 0.55; filter: grayscale(0.6); }
+.plays { font-weight: 600; white-space: nowrap; }
+
 /* (.pads and .pad are also the Live page's floating pads: undo what doesn't apply here.) */
-.daw-app .pads { position: static; flex: none; width: 128px; display: flex; flex-direction: column; justify-content: space-between; gap: 3px; }
+.daw-app .pads { position: static; flex: none; width: 120px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
 .pads .ctl-label { font-size: 8px; }
 .daw-app .pad {
-  flex: 1; display: flex; transform: none; align-items: center; justify-content: space-between; gap: 4px; padding: 0 7px; min-height: 18px;
+  flex: 1; display: flex; transform: none; align-items: center; justify-content: space-between; gap: 4px; padding: 0 8px; min-height: 18px;
   font: inherit; font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; cursor: pointer; border-radius: 5px;
   color: #ffc2f0; background: rgba(255, 79, 216, 0.06); border: 1px solid rgba(255, 79, 216, 0.28);
 }
@@ -445,11 +498,8 @@ body:has(.daw-app) { background: #010205; }
 .daw-app .pad kbd { font-size: 8px; padding: 1px 3px; }
 .daw-app .pad:hover { background: rgba(255, 79, 216, 0.12); }
 .daw-app .pad.is-down { color: #fff; background: rgba(255, 79, 216, 0.4); border-color: #ff8fe6; box-shadow: 0 0 14px rgba(255, 79, 216, 0.6); }
-@media (max-height: 800px) {
-  .daw-app .key-row .keybed { height: 52px; }
-  .daw-app .key-row .breakaway .breakaway-sub { display: none; }
-}
-@media (max-width: 1150px) { .daw-app .pads { width: 108px; } .daw-app .pad kbd { display: none; } }
+@media (max-width: 1250px) { .kb-range { display: none; } }
+@media (max-width: 1150px) { .daw-app .pads { width: 100px; } .daw-app .pad kbd { display: none; } .kb-sub { display: none; } }
 
 /* ----------------------------- drawers and toast --------------------------- */
 

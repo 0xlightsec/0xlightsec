@@ -181,11 +181,23 @@ the same instruments and mixer, so the file sounds exactly like playback.
 `.prismbeat` file, delete, or start a new one. The song you're working on is also
 kept between sessions automatically.
 
-**The keyboard** at the bottom (ivory and ebony keys on a felt strip) plays the
-selected channel, as before: `A`…`'` and
-`W E T Y U O P`, `Z`/`X` for the octave, `C` for chords, and **Breakaway** (`Esc`)
-hands the keyboard back. The Browser's corner shows the beat as light: one circle
-follows the melody (its notes set the petals), the other the drums.
+**The keyboard** at the bottom is a real-looking piano, as many octaves as fit
+(two to five). It plays the selected channel.
+- **Play it:** click a key, or slide across the keys for a glissando. The computer
+  keyboard plays too: `A`…`'` and `W E T Y U O P`, and those keys carry their
+  letters. A MIDI keyboard works as well. Whatever is held lights up, however it's
+  played.
+- **The whole-piano slider** above it shows all 88 keys. Drag along it, click it or
+  scroll it to choose which part of the piano you see and play (`Z` / `X` shift by
+  an octave).
+- **Its settings** sit in its title strip: which channel it plays, **Chords** (`C`),
+  and **Keys on** (`Esc` hands the computer keyboard back, `Enter` takes it again).
+- **Size:** drag its top edge to make it taller or shorter (double-click the edge
+  to reset), or press **▾** to fold it away to its title strip. It remembers both.
+- **Pads** sit next to it.
+
+The Browser's corner shows the beat as light: one circle follows the melody (its
+notes set the petals), the other the drums.
 
 ## Live
 
@@ -469,7 +481,7 @@ src/js/render/          stage.js · harmonic.js (curve modes) · wheel.js
 src/js/daw/             model.js (song, patterns, playlist, mixer, undo) · midi-file.js ·
                         instruments.js · mixer.js · engine.js · songs-db.js ·
                         cynmixx.js (the one-click beat generator) · app.js
-src/js/daw/views/       rack.js · piano-roll.js · playlist.js · mixer-view.js · browser.js ·
+src/js/daw/views/       rack.js · piano-roll.js · piano-keys.js · playlist.js · mixer-view.js · browser.js ·
                         datacenter.js (the backdrop)
 src/js/studio/          (the Live page) engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
                         sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·

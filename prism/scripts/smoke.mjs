@@ -122,6 +122,8 @@ async function drive() {
     await waitFor("document.readyState === 'complete' && document.querySelector('.ch-row') && true");
     check((await waitFor("document.querySelectorAll('.ch-row').length")) === 6, 'channel rack built: kick, clap, hat, snare, 808, pluck');
     check((await waitFor("document.getElementById('startVeil').hidden && 'running'", 8000)) === 'running', 'audio starts without a click');
+    const piano = await evaluate(`(() => { const k = document.querySelectorAll('#keybed .key'); const m = document.querySelectorAll('#keybed .key.is-mapped'); return k.length >= 25 && m.length === 18 && k.length + ' keys, ' + m.length + ' on the computer keyboard'; })()`);
+    check(!!piano, 'the on-screen piano is built, with the computer keys marked', String(piano));
     let at = await centre('.ch-row:nth-child(1) .step[data-step="0"]');
     await click(at.x, at.y);
     check((await waitFor(songState(`(p.notes[s.channels[0].id] || []).length`), 5000)) === 1, 'clicking a step puts a kick on it');
