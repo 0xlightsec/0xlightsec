@@ -1019,7 +1019,21 @@ function drawViz(dt) {
 let last = performance.now();
 let lastPos = '';
 
+/*
+ * With another app in front, the Studio keeps playing but redraws a few times a
+ * second and lets the backdrop rest; minimised, it draws nothing. (The window
+ * never throttles itself, so the sequencer keeps time; the drawing has to.)
+ */
+let winFocused = document.hasFocus();
+window.addEventListener('focus', () => (winFocused = true));
+window.addEventListener('blur', () => (winFocused = false));
+let lastDrawn = 0;
+const AWAY_MS = 125;
+
 function frame(now) {
+  requestAnimationFrame(frame);
+  if (document.hidden || (!winFocused && now - lastDrawn < AWAY_MS)) return;
+  lastDrawn = now;
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   const pos = engine.position();
@@ -1034,9 +1048,8 @@ function frame(now) {
     lastPos = text;
   }
   if (ui.browser) drawViz(dt);
-  backdrop.draw(dt, { level: tapLevel(engine.outTap), hit: drumHit(now) });
+  if (winFocused) backdrop.draw(dt, { level: tapLevel(engine.outTap), hit: drumHit(now) });
   $('startVeil').hidden = !engine.ctx || engine.ctx.state !== 'suspended';
-  requestAnimationFrame(frame);
 }
 
 /* --------------------------------- storage --------------------------------- */

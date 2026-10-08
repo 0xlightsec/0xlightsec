@@ -38,7 +38,9 @@ shortcuts are FL's too. The windows are opaque panels floating over a live **dat
 center**: points of light in a dark void, wired to their neighbours, with packets
 running along the wires. It glows through the windows' glass title strips and
 the gaps between them. Every drum hit sends a pulse through it, and it breathes
-with the mix.
+with the mix. While another app is in front, the Studio keeps playing but redraws
+only a few times a second and the backdrop rests, so it doesn't slow your
+computer down.
 
 ### ⚡ One-click Cynmixx beats
 
@@ -139,8 +141,20 @@ it. Click the ruler to set where the song plays from. Switching to SONG with an
 empty playlist puts the current pattern in at bar 1.
 
 **Mixer.** Every channel plays into its insert and every insert into the master.
-Each strip has a fader, pan, mute/solo and a peak meter, and lists the channels
-feeding it. Click a strip to edit its effects. Double-click a name to rename it.
+- **Strips:** each has a fader, pan, mute/solo, a peak meter, a pip for every
+  effect on it, and the channels feeding it.
+- **Faders:** drag the cap (`Shift` for fine moves), click the slot to jump, scroll
+  or use the arrow keys to nudge, and double-click for 0 dB.
+- **Adding inserts:** **+ Insert** adds one, up to 24. **+ for <channel>** adds one
+  and sends the selected channel to it. A new channel gets its own insert even when
+  the first eight are taken.
+- **Routing:** **⇢** on a strip sends the selected channel there. The Channel Rack's
+  mixer picker can also make a new insert.
+- **Removing:** **✕** removes an insert (click twice). Its channels go to the
+  master.
+- **Renaming:** double-click a name.
+- **Effects:** click a strip to see its effects. Like FL's slots, the strip lists
+  what's on it, **+ Add effect** puts another one in, and **×** takes it out.
 
 | effect | what it does |
 |---|---|
@@ -153,7 +167,7 @@ feeding it. Click a strip to edit its effects. Double-click a name to rename it.
 | **Clip** | gain into a hard ceiling with a soft knee, up to +18 dB: the loud 808 move |
 | **Gate** | a ShaperBox-style chopper that closes each sixteenth, locked to the song and swung with it |
 
-Presets set a whole strip in one click: **Clean**, **Loud 808**, **Chop**,
+Presets set a strip's whole set of effects in one click: **Clean**, **Loud 808**, **Chop**,
 **Dusty**, **Big room**, **Phone**.
 
 **Pads.** Next to the keyboard, hold them to play the whole mix:
@@ -500,7 +514,8 @@ ratios, the piano tuning curve, that each figure spins at its real beat rate, an
 the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
 beatmaker's song model (steps and notes, muted notes, pattern and song playback, loops and
 clip repeats, beats, undo, loading untrusted files), MIDI file reading and writing,
-the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
+the mixer growing and shrinking (a new channel gets its own insert; removing one
+re-routes its channels), effect slots, the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
 on it, every melodic note in the Phrygian key, the octave-up hook, slides, re-rolls
 that keep the other half, re-rolling after a save), the scales, the clipper and gate,
 the looper's timing (latency, bar snapping, pre-roll, undo and redo, one output per

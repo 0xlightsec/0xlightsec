@@ -13,6 +13,8 @@
 import { FxChain, SpaceBus } from '../studio/fx.js';
 import { INSERTS } from './model.js';
 
+const SILENT = 1e-4;
+
 export class Strip {
   constructor(ctx, space, out) {
     this.ctx = ctx;
@@ -37,6 +39,18 @@ export class Strip {
     }
   }
 
+  /** Unplug it, letting its tails ring out first. */
+  dispose() {
+    this.fx.gateOpen?.();
+    this.input.gain.setTargetAtTime(SILENT, this.ctx.currentTime, 0.02);
+    setTimeout(() => {
+      this.panner.disconnect();
+      this.fx.spaceSend.disconnect();
+      this.fx.wow.stop();
+      this.fx.flutter.stop();
+    }, 400);
+  }
+
   /** Peak level of the last few milliseconds, 0..1+. */
   peak() {
     this.meter.getFloatTimeDomainData(this.buf);
@@ -51,11 +65,24 @@ export class Strip {
 
 export class Mixer {
   constructor(ctx, out) {
+    this.ctx = ctx;
+    this.bpm = 0;
     this.post = ctx.createGain();
     this.post.connect(out);
     this.space = new SpaceBus(ctx, this.post);
     this.master = new Strip(ctx, this.space, this.post);
-    this.inserts = Array.from({ length: INSERTS }, () => new Strip(ctx, this.space, this.master.input));
+    this.inserts = [];
+    this.resize(INSERTS);
+  }
+
+  /** Grow or shrink to `n` inserts (the song's mixer can be added to). */
+  resize(n) {
+    while (this.inserts.length < n) {
+      const strip = new Strip(this.ctx, this.space, this.master.input);
+      if (this.bpm) strip.fx.setTempo(this.bpm);
+      this.inserts.push(strip);
+    }
+    while (this.inserts.length > n) this.inserts.pop().dispose();
   }
 
   /** Every strip, the master first. */
@@ -72,6 +99,7 @@ export class Mixer {
   }
 
   update(tracks) {
+    this.resize(tracks.length - 1);
     const soloing = tracks.slice(1).some((t) => t.solo);
     tracks.forEach((t, i) => {
       const audible = i === 0 ? !t.mute : soloing ? t.solo && !t.mute : !t.mute;
@@ -80,6 +108,7 @@ export class Mixer {
   }
 
   setTempo(bpm) {
+    this.bpm = bpm;
     for (const s of this.strips) s.fx.setTempo(bpm);
   }
 

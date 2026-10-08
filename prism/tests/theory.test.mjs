@@ -783,6 +783,44 @@ check('a muted note stays in the pattern but never plays or exports, and survive
   assert.deepEqual(notes.map((n) => [n.midi, !!n.muted]), [[48, false], [50, true]]);
   assert.ok(!('muted' in notes[0]), 'unmuted notes carry no flag');
 });
+check('the mixer grows: a new channel gets a fresh insert when they are all taken, up to the limit', () => {
+  const s = daw.newSong();
+  for (let k = 0; k < 2; k++) s.addChannel({ kind: 'synth', sound: 'keys' });
+  assert.equal(s.inserts, daw.INSERTS); assert.deepEqual(s.channels.slice(-2).map((c) => c.insert), [7, 8]);
+  const extra = s.addChannel({ kind: 'synth', sound: 'lead' });
+  assert.equal(extra.insert, 9); assert.equal(s.inserts, 9); assert.equal(s.data.mixer[9].name, extra.name);
+  while (s.inserts < daw.MAX_INSERTS) s.addInsert();
+  assert.equal(s.addInsert(), 0, 'full');
+  s.data.channels.forEach((c, i) => (c.insert = i + 1));
+  for (let i = s.channels.length; i < daw.MAX_INSERTS; i++) s.addChannel({ kind: 'drum', drum: 'hat' });
+  assert.equal(s.addChannel({ kind: 'drum', drum: 'rim' }).insert, 0, 'a full mixer sends new channels to the master');
+});
+check('removing an insert sends its channels to the master and moves the later ones down', () => {
+  const s = daw.newSong();
+  const before = s.channels.map((c) => c.insert); // 1..6
+  assert.ok(s.removeInsert(2));
+  assert.deepEqual(s.channels.map((c) => c.insert), before.map((i) => (i === 2 ? 0 : i > 2 ? i - 1 : i)));
+  assert.equal(s.inserts, daw.INSERTS - 1);
+  assert.equal(s.data.mixer[7].name, 'Insert 7', 'default names follow their new number');
+  assert.ok(!s.removeInsert(0) && !s.removeInsert(99));
+});
+check('effect slots: add one and it is heard, take it out and it does nothing; saved with the song', () => {
+  const s = daw.newSong();
+  assert.deepEqual(daw.stripSlots(s.data.mixer[1]), []);
+  s.addEffect(1, 'gate'); s.addEffect(1, 'drive');
+  assert.deepEqual(daw.stripSlots(s.data.mixer[1]), ['drive', 'gate'], 'in the order the sound flows');
+  assert.equal(s.data.mixer[1].fx.gate, daw.FX_START.gate);
+  s.data.mixer[1].fx.drive = 0; // turned all the way down, it stays in its slot
+  assert.deepEqual(daw.stripSlots(s.data.mixer[1]), ['drive', 'gate']);
+  s.removeEffect(1, 'gate');
+  assert.deepEqual(daw.stripSlots(s.data.mixer[1]), ['drive']); assert.equal(s.data.mixer[1].fx.gate, 0);
+  s.data.mixer[2].fx.clip = 0.4; // set without a slot (an old song, a preset): it shows anyway
+  assert.deepEqual(daw.stripSlots(s.data.mixer[2]), ['clip']);
+  for (let k = 0; k < 3; k++) s.addInsert();
+  const back = daw.loadSong(JSON.stringify(s.toJSON()));
+  assert.equal(back.inserts, daw.INSERTS + 3, 'extra inserts come back');
+  assert.deepEqual(daw.stripSlots(back.data.mixer[1]), ['drive']); assert.deepEqual(daw.stripSlots(back.data.mixer[2]), ['clip']);
+});
 check('swing pushes every second sixteenth; positions read bar:beat:step', () => {
   assert.equal(daw.swingOffset(1, 0.5), 0.25); assert.equal(daw.swingOffset(2, 0.5), 0); assert.equal(daw.swingOffset(1.5, 0.5), 0);
   assert.equal(daw.formatPosition(0), '1:1:1'); assert.equal(daw.formatPosition(21), '2:2:2');

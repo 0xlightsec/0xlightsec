@@ -22,7 +22,8 @@ import { FX_DEFAULTS } from '../studio/fx.js';
 export const VERSION = 2;
 export const STEPS_PER_BAR = 16;
 export const PATTERN_BARS = [1, 2, 4, 8, 16];
-export const INSERTS = 8;
+export const INSERTS = 8;       // a new song's mixer inserts
+export const MAX_INSERTS = 24;  // the most the mixer grows to
 export const PLAYLIST_TRACKS = 8;
 export const NOTE_LOW = 12;   // C0
 export const NOTE_HIGH = 108; // C8
@@ -60,11 +61,29 @@ const num = (v, fallback) => (Number.isFinite(v) ? v : fallback);
 /** A colour for anything with an index: patterns and channels step round the wheel. */
 export const hueOf = (i) => (i * 137.508) % 360;
 
-export function defaultMixer() {
+/** A strip's effects in the order the sound goes through them (the two sends last). */
+export const FX_ORDER = ['drive', 'crush', 'filter', 'tape', 'clip', 'gate', 'echo', 'space'];
+/** Each effect's setting that does nothing. */
+export const FX_NEUTRAL = { drive: 0, crush: 0, filter: 0.5, tape: 0, clip: 0, gate: 0, echo: 0, space: 0 };
+/** Where an effect starts when it's added to a strip: enough to hear it. */
+export const FX_START = { drive: 0.3, crush: 0.35, filter: 0.3, tape: 0.4, clip: 0.3, gate: 0.75, echo: 0.3, space: 0.3 };
+
+/** A mixer strip with its fader at unity and every effect off. */
+export function mixerStrip(name) {
   const { level, mute, ...sound } = FX_DEFAULTS;
-  const strip = (name) => ({ name, volume: level, pan: 0, mute: false, solo: false, fx: { ...sound, space: 0 } });
-  const tracks = [strip('Master')];
-  for (let i = 1; i <= INSERTS; i++) tracks.push(strip(`Insert ${i}`));
+  return { name, volume: level, pan: 0, mute: false, solo: false, fx: { ...sound, space: 0 }, slots: [] };
+}
+
+/** The effect slots a strip shows: the ones added to it, and any effect that's doing something. */
+export function stripSlots(strip) {
+  const on = new Set(strip.slots ?? []);
+  for (const k of FX_ORDER) if (Math.abs((strip.fx[k] ?? FX_NEUTRAL[k]) - FX_NEUTRAL[k]) > 0.004) on.add(k);
+  return FX_ORDER.filter((k) => on.has(k));
+}
+
+export function defaultMixer(inserts = INSERTS) {
+  const tracks = [mixerStrip('Master')];
+  for (let i = 1; i <= inserts; i++) tracks.push(mixerStrip(`Insert ${i}`));
   return tracks;
 }
 
@@ -162,11 +181,57 @@ export class Song {
     return ch;
   }
 
-  /** The first insert nothing plays through yet, else the master. */
+  /** How many inserts the mixer has (besides the master). */
+  get inserts() {
+    return this.data.mixer.length - 1;
+  }
+
+  /** The first insert nothing plays through yet; a new one if they're all taken; the master if the mixer is full. */
   freeInsert() {
     const used = new Set(this.data.channels.map((c) => c.insert));
-    for (let i = 1; i <= INSERTS; i++) if (!used.has(i)) return i;
-    return 0;
+    for (let i = 1; i <= this.inserts; i++) if (!used.has(i)) return i;
+    return this.addInsert();
+  }
+
+  /** A new insert at the end of the mixer; its number, or 0 if the mixer is full. */
+  addInsert(name) {
+    if (this.inserts >= MAX_INSERTS) return 0;
+    const i = this.data.mixer.length;
+    this.data.mixer.push(mixerStrip(name ?? `Insert ${i}`));
+    return i;
+  }
+
+  /** Put an effect in a strip's slots, starting where it can be heard. */
+  addEffect(i, name) {
+    const strip = this.data.mixer[i];
+    if (!strip || !(name in FX_NEUTRAL)) return;
+    if (Math.abs(strip.fx[name] - FX_NEUTRAL[name]) < 0.004) strip.fx[name] = FX_START[name];
+    strip.slots = stripSlots({ ...strip, slots: [...(strip.slots ?? []), name] });
+  }
+
+  /** Take an effect out of a strip: it's set back to doing nothing. */
+  removeEffect(i, name) {
+    const strip = this.data.mixer[i];
+    if (!strip || !(name in FX_NEUTRAL)) return;
+    strip.fx[name] = FX_NEUTRAL[name];
+    strip.slots = stripSlots({ ...strip, slots: (strip.slots ?? []).filter((k) => k !== name) });
+  }
+
+  /**
+   * Remove an insert. Channels playing through it go to the master; the inserts
+   * after it move down one, and their channels with them. One insert always stays.
+   */
+  removeInsert(i) {
+    if (i < 1 || i > this.inserts || this.inserts <= 1) return false;
+    this.data.mixer.splice(i, 1);
+    for (const c of this.data.channels) {
+      if (c.insert === i) c.insert = 0;
+      else if (c.insert > i) c.insert -= 1;
+    }
+    this.data.mixer.forEach((s, k) => {
+      if (k > 0 && /^Insert \d+$/.test(s.name)) s.name = `Insert ${k}`;
+    });
+    return true;
   }
 
   removeChannel(id) {
@@ -439,14 +504,14 @@ export function loadSong(raw) {
     channels: [],
     patterns: [],
     playlist: { tracks: PLAYLIST_TRACKS, clips: [] },
-    mixer: defaultMixer(),
+    mixer: defaultMixer(Array.isArray(d.mixer) ? clamp(d.mixer.length - 1, 1, MAX_INSERTS) : INSERTS),
     current: { pattern: null, channel: null },
     mode: d.mode === 'song' ? 'song' : 'pattern',
     position: Math.max(0, num(d.position, 0))
   });
   const ids = new Map(); // old id -> new id
   for (const c of d.channels) {
-    const ch = song.addChannel({ ...c, insert: Number.isInteger(c.insert) ? clamp(c.insert, 0, INSERTS) : undefined });
+    const ch = song.addChannel({ ...c, insert: Number.isInteger(c.insert) ? clamp(c.insert, 0, song.inserts) : undefined });
     ch.name = typeof c.name === 'string' && c.name ? c.name.slice(0, 40) : ch.name;
     ch.volume = clamp(num(c.volume, 0.8), 0, 1);
     ch.pan = clamp(num(c.pan, 0), -1, 1);
@@ -471,7 +536,7 @@ export function loadSong(raw) {
     if (pattern) song.addClip({ ...c, pattern });
   }
   if (Array.isArray(d.mixer)) {
-    d.mixer.slice(0, INSERTS + 1).forEach((t, i) => {
+    d.mixer.slice(0, song.data.mixer.length).forEach((t, i) => {
       const strip = song.data.mixer[i];
       if (typeof t?.name === 'string' && t.name) strip.name = t.name.slice(0, 24);
       strip.volume = clamp(num(t?.volume, strip.volume), 0, 1);
@@ -479,6 +544,7 @@ export function loadSong(raw) {
       strip.mute = !!t?.mute;
       strip.solo = !!t?.solo;
       for (const k of Object.keys(strip.fx)) strip.fx[k] = clamp(num(t?.fx?.[k], strip.fx[k]), 0, 1);
+      strip.slots = stripSlots({ ...strip, slots: Array.isArray(t?.slots) ? t.slots.filter((k) => FX_ORDER.includes(k)) : [] });
     });
   }
   song.data.current = {

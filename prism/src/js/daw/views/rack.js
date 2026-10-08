@@ -16,7 +16,7 @@
 import { SOUNDS, GROUPS } from '../../studio/sounds.js';
 import { KITS, KIT_LABELS } from '../../studio/drums.js';
 import { Knob } from '../../studio/knob.js';
-import { DRUMS, PATTERN_BARS, INSERTS, ROOT, hueOf } from '../model.js';
+import { DRUMS, PATTERN_BARS, MAX_INSERTS, ROOT, hueOf } from '../model.js';
 import { hueFor, pitchClass } from '../../theory/circle.js';
 
 const el = (tag, cls, attrs = {}) => {
@@ -324,10 +324,17 @@ export class ChannelRack {
 
     const ins = el('select', '', { 'aria-label': 'Mixer insert' });
     ins.appendChild(el('option', '', { value: '0', text: 'Master' }));
-    for (let i = 1; i <= INSERTS; i++) ins.appendChild(el('option', '', { value: String(i), text: `${i} · ${this.song.data.mixer[i].name}` }));
+    for (let i = 1; i <= this.song.inserts; i++) ins.appendChild(el('option', '', { value: String(i), text: `${i} · ${this.song.data.mixer[i].name}` }));
+    if (this.song.inserts < MAX_INSERTS) ins.appendChild(el('option', '', { value: 'new', text: '+ New insert' }));
     ins.value = String(ch.insert);
     field('Mixer', ins).addEventListener('change', () => {
-      this.studio.edit(() => (ch.insert = Number(ins.value)));
+      this.studio.edit(() => {
+        if (ins.value !== 'new') ch.insert = Number(ins.value);
+        else {
+          const i = this.song.addInsert(ch.name.slice(0, 24));
+          if (i) ch.insert = i;
+        }
+      });
       ins.blur();
     });
 

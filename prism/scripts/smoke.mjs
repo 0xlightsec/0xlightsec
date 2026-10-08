@@ -133,6 +133,12 @@ async function drive() {
     await key('F9', 'F9', 120);
     const lit = await waitFor(`(() => { const c = document.querySelector('.mx-meter'); if (!c || !c.width) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++; return n > c.width * 4 && n; })()`, 8000);
     check(!!lit, 'the mixer meters move with the beat', `${lit} lit pixels on the master meter`);
+    const faderH = await evaluate(`Math.round(document.querySelector('.mx-fader').getBoundingClientRect().height)`);
+    check(faderH > 60, 'the mixer faders stand up', `${faderH} px tall`);
+    const inserts = await evaluate(songState('s.mixer.length'));
+    await evaluate(`document.querySelector('.mx-add-btn').click(), true`);
+    const grown = await waitFor(songState(`s.mixer.length > ${inserts} && s.mixer.length`), 5000);
+    check(grown === inserts + 1, '+ Insert adds a mixer insert', `${inserts - 1} -> ${grown - 1} inserts`);
     await key('Space', ' ', 32);
     check((await waitFor(`document.getElementById('playBtn').getAttribute('aria-label') === 'Play' && 'stopped'`, 5000)) === 'stopped', 'Space stops');
     await key('F7', 'F7', 118);

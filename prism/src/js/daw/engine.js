@@ -52,6 +52,7 @@ export class Rig {
 
   sync(song) {
     const seen = new Set();
+    this.mixer.resize(song.data.mixer.length - 1); // before routing: a channel may play through a new insert
     for (const ch of song.channels) {
       seen.add(ch.id);
       const out = this.mixer.input(ch.insert);
