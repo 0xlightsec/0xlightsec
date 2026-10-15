@@ -287,6 +287,7 @@ export class Instrument {
         this.synth.sound = ch.sound;
       }
       this.synth.shape = { ...ch.shape };
+      this.synth.setWave(ch.wave ?? null);
     } else {
       this.drum = ch.drum;
       this.drums.setKit(ch.kit);

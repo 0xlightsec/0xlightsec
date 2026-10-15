@@ -225,6 +225,29 @@
     </footer>
   </aside>
 
+  <div class="wave-veil" id="waveVeil" hidden>
+    <section class="window wave-win" id="waveWin" aria-label="Wave editor">
+      <header class="win-head">
+        <span class="win-title"><i class="win-led"></i>Wave</span>
+        <span class="win-meta" id="waveWho"></span>
+        <span class="spacer"></span>
+        <button class="toggle" id="waveHear" aria-pressed="true" title="Hold a note while you draw, so you hear the wave change">♪ Hear</button>
+        <button class="win-x" id="waveClose" title="Close" aria-label="Close the wave editor">✕</button>
+      </header>
+      <div class="wave-body">
+        <div class="wave-tools">
+          <div class="seg" id="waveMode" aria-label="View"></div>
+          <div class="wave-shapes" id="waveShapes" aria-label="Shapes"></div>
+        </div>
+        <canvas id="waveCanvas"></canvas>
+        <div class="wave-tools">
+          <div class="wave-ops" id="waveOps" aria-label="Tools"></div>
+        </div>
+        <p class="wave-tip">Draw: drag across the cycle. Harmonics: drag the bars. Every oscillator of the sound plays your wave, with the sound's own envelope, filter and effects. Hold a key on the keyboard while you draw and it changes under your hand.</p>
+      </div>
+    </section>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
   <div class="start-veil" id="startVeil" hidden><button class="start-btn" id="startBtn">Start the studio</button></div>
 </div>

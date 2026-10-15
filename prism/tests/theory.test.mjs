@@ -864,6 +864,59 @@ check('automating an effect: a flat line at the knob, or a ready shape; cleared,
   s.clearAutomation(1, 'filter'); assert.equal(s.data.mixer[1].auto, undefined);
   s.removeEffect(2, 'gate'); assert.equal(s.data.mixer[2].auto, undefined);
 });
+const wave = await import('../src/js/studio/wave.js');
+check('drawn waves: the shapes, their harmonics, and back again', () => {
+  for (const id of Object.keys(wave.WAVE_SHAPES)) {
+    const w = wave.shapeWave(id);
+    assert.equal(w.length, wave.WAVE_N);
+    assert.ok(Math.abs(Math.max(...w.map(Math.abs)) - 1) < 1e-9, `${id} peaks at 1`);
+  }
+  const sine = wave.harmonicLevels(wave.shapeWave('sine'));
+  assert.ok(Math.abs(sine[0] - 1) < 1e-6 && sine.slice(1).every((v) => v < 1e-6), 'a sine is its first harmonic alone');
+  const square = wave.harmonicLevels(wave.shapeWave('square'), 8);
+  assert.ok(square[1] < 1e-6 && square[3] < 1e-6, 'a square has no even harmonics');
+  assert.ok(Math.abs(square[2] / square[0] - 1 / 3) < 0.02 && Math.abs(square[4] / square[0] - 1 / 5) < 0.02, 'and odd ones fall as 1/k');
+  // Harmonics and back is the same cycle (for anything a cycle of samples can hold: a sampled saw's corners go past that).
+  for (const w of [wave.shapeWave('organ'), wave.randomWave(() => 0.37)]) {
+    const { real, imag } = wave.waveToHarmonics(w);
+    const back = wave.harmonicsToWave(real, imag);
+    assert.ok(w.every((v, n) => Math.abs(v - back[n]) < 1e-6), 'harmonics and back is the same cycle');
+  }
+  const saw = wave.shapeWave('sawtooth');
+  assert.ok(wave.harmonicLevels(wave.symmetricWave(saw)).every((v, i) => i % 2 === 0 || v < 1e-6), 'symmetry leaves odd harmonics only');
+  const bumped = wave.setHarmonic(wave.shapeWave('sine'), 3, 0.5);
+  const lv = wave.harmonicLevels(bumped);
+  // The new bar is half the first; the wave is scaled to stay within ±1, so both shrink together.
+  assert.ok(Math.abs(lv[2] / lv[0] - 0.5) < 1e-6 && lv[1] < 1e-6 && lv[3] < 1e-6, 'one bar moves, the rest stay');
+  assert.ok(Math.max(...bumped.map(Math.abs)) <= 1 + 1e-9, 'and it never goes past ±1');
+  const r = wave.randomWave(() => 0.5);
+  assert.equal(r.length, wave.WAVE_N); assert.ok(Math.abs(Math.max(...r.map(Math.abs)) - 1) < 1e-9);
+  const step = (w) => Math.max(...w.map((v, n) => Math.abs(v - w[(n + 1) % w.length])));
+  assert.ok(step(wave.smoothWave(wave.shapeWave('square'))) < step(wave.shapeWave('square')) * 0.8, 'smoothing rounds the corners: the jumps shrink');
+});
+check('a drawn wave is kept clean: 128 numbers in range, resampled from any length, junk refused', () => {
+  const short = Array.from({ length: 32 }, (_, i) => Math.sin((2 * Math.PI * i) / 32));
+  const c = wave.cleanWave(short);
+  assert.equal(c.length, wave.WAVE_N); assert.ok(Math.abs(c[32] - 1) < 0.01, 'resampled: the peak lands where it was');
+  const raw = new Array(wave.WAVE_N).fill(0); raw[0] = 5; raw[1] = -5; raw[2] = 0.12345;
+  assert.deepEqual(wave.cleanWave(raw).slice(0, 3), [1, -1, 0.123], 'clamped to ±1, rounded');
+  assert.equal(wave.cleanWave('nope'), null); assert.equal(wave.cleanWave([1, 2]), null); assert.equal(wave.cleanWave([1, NaN, ...new Array(30).fill(0)]), null);
+  assert.deepEqual(wave.baseWaveOf({ osc: [{ saws: 7 }] }), wave.shapeWave('sawtooth'));
+});
+check('a channel keeps its drawn wave: saved, loaded, duplicated, cleared; drums never get one', () => {
+  const s = daw.newSong();
+  const synth = s.channels[5], drum = s.channels[0];
+  s.setWave(synth.id, wave.shapeWave('square'));
+  s.setWave(drum.id, wave.shapeWave('square'));
+  assert.equal(synth.wave.length, wave.WAVE_N); assert.equal(drum.wave, undefined);
+  const copy = s.duplicateChannel(synth.id);
+  assert.deepEqual(copy.wave, synth.wave);
+  const back = daw.loadSong(JSON.stringify(s.toJSON()));
+  assert.deepEqual(back.channels[5].wave, synth.wave);
+  s.setWave(synth.id, null); assert.ok(!('wave' in synth));
+  const junk = daw.loadSong({ channels: [{ id: 'x', kind: 'synth', sound: 'keys', wave: 'bad' }], patterns: [] });
+  assert.ok(!('wave' in junk.channels[0]));
+});
 check('swing pushes every second sixteenth; positions read bar:beat:step', () => {
   assert.equal(daw.swingOffset(1, 0.5), 0.25); assert.equal(daw.swingOffset(2, 0.5), 0); assert.equal(daw.swingOffset(1.5, 0.5), 0);
   assert.equal(daw.formatPosition(0), '1:1:1'); assert.equal(daw.formatPosition(21), '2:2:2');

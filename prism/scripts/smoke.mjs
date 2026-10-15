@@ -180,6 +180,30 @@ async function drive() {
       return Math.sqrt(sum / d.length).toFixed(4);
     })()`);
     check(parseFloat(hood) > 0.12 && parseFloat(hood) < 0.6, 'the generated hook renders loud but not crushed', `${hood} rms`);
+    // A drawn wave: the editor opens from the rack, a shape goes on the channel, and it changes the sound.
+    await key('F6', 'F6', 117);
+    await sleep(300);
+    // The song is the Cynmixx beat by now: its Lead is a synth channel (a fresh song's Pluck, otherwise).
+    await evaluate(`[...document.querySelectorAll('.ch-row .ch-name')].find((b) => b.textContent === 'Lead' || b.textContent === 'Pluck').click(), true`);
+    await evaluate(`document.querySelector('.insp-wave').click(), true`);
+    check(await waitFor(`!document.getElementById('waveVeil').hidden && document.getElementById('waveCanvas').getBoundingClientRect().width > 300 && 'open'`, 5000) === 'open', 'the wave editor opens from the Channel Rack');
+    await evaluate(`[...document.querySelectorAll('#waveShapes .pill')].find((b) => b.textContent === 'Square').click(), true`);
+    const drawnWave = await waitFor(songState(`(s.channels.find((c) => c.name === 'Lead' || c.name === 'Pluck').wave || []).length`), 5000);
+    check(drawnWave === 128, 'picking a shape puts a 128-point wave on the channel', `${drawnWave} points`);
+    await evaluate(`document.getElementById('waveClose').click(), true`);
+    const timbre = await evaluate(`(async () => {
+      const { newSong } = await import('./js/daw/model.js');
+      const { DawEngine } = await import('./js/daw/engine.js');
+      const { shapeWave } = await import('./js/studio/wave.js');
+      const bright = async (w) => {
+        const s = newSong(); const k = s.channels[5]; k.sound = 'keys'; if (w) s.setWave(k.id, shapeWave(w));
+        s.addNote(s.currentPattern.id, k.id, { start: 0, length: 8, midi: 57 });
+        const d = (await new DawEngine(s).render('pattern', { tail: 0, sampleRate: 22050 })).getChannelData(0);
+        let e = 0, t = 0; for (let i = 1; i < d.length; i++) { e += (d[i] - d[i - 1]) ** 2; t += d[i] * d[i]; } return e / t;
+      };
+      return [(await bright('square')) / (await bright(null))].map((v) => v.toFixed(2));
+    })()`);
+    check(parseFloat(timbre[0]) > 2, 'a drawn square wave is heard: far brighter than the sound\'s own shape', `${timbre[0]}x the high-frequency energy`);
     const swept = await evaluate(`(async () => {
       const { newSong } = await import('./js/daw/model.js');
       const { DawEngine } = await import('./js/daw/engine.js');

@@ -18,6 +18,7 @@
 import { SOUNDS } from '../studio/sounds.js';
 import { KITS, BEATS } from '../studio/drums.js';
 import { FX_DEFAULTS } from '../studio/fx.js';
+import { cleanWave } from '../studio/wave.js';
 
 export const VERSION = 2;
 export const STEPS_PER_BAR = 16;
@@ -269,6 +270,7 @@ export class Song {
       drum: kind === 'drum' ? (spec.drum in DRUMS ? spec.drum : 'kick') : null,
       kit: kind === 'drum' ? (spec.kit in KITS ? spec.kit : 'classic') : null,
       shape: { tone: 0.5, attack: 0.5, release: 0.5, ...spec.shape },
+      ...(kind === 'synth' && cleanWave(spec.wave) ? { wave: cleanWave(spec.wave) } : {}), // a drawn cycle, if there is one
       volume: num(spec.volume, 0.8),
       pan: num(spec.pan, 0),
       mute: false,
@@ -387,6 +389,15 @@ export class Song {
     if (i < 0 || i === j) return;
     const [c] = list.splice(i, 1);
     list.splice(j, 0, c);
+  }
+
+  /** Give a synth channel a drawn wave (null: back to its sound's own shapes). */
+  setWave(id, samples) {
+    const ch = this.channel(id);
+    if (!ch || ch.kind !== 'synth') return;
+    const wave = cleanWave(samples);
+    if (wave) ch.wave = wave;
+    else delete ch.wave;
   }
 
   /** Channels that sound: soloed ones if any are, else every unmuted one. */

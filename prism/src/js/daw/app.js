@@ -34,6 +34,7 @@ import { KEY_NAMES, SCALES, chordFor, chordName, inScale } from '../studio/sound
 import { BEATS } from '../studio/drums.js';
 import { KeyboardInstrument } from '../io/keyboard.js';
 import { PianoKeys, HEIGHT_DEFAULT } from './views/piano-keys.js';
+import { WaveEditor } from './views/wave-editor.js';
 import { MidiInput } from '../io/midi.js';
 import { wireWindowChrome, renderFocusBadge, trackFocus } from '../chrome.js';
 import { encodeWav } from '../scope/tracks.js';
@@ -167,6 +168,10 @@ const studio = {
     mixer.selected = i;
     showView('mixer');
   },
+  /** Draw the waveform a synth channel plays. */
+  openWave(channelId) {
+    waveEditor.open(channelId);
+  },
   preview(channelId, midi, on) {
     engine.preview(channelId, midi, on);
   },
@@ -231,6 +236,10 @@ roll.tool = TOOLS.includes(ui.rollTool) ? ui.rollTool : 'draw';
 const playlist = new Playlist($('playlistCanvas'), studio);
 const mixer = new MixerView($('mixerView'), studio);
 const browser = new Browser($('browserList'), studio);
+const waveEditor = new WaveEditor(
+  { veil: $('waveVeil'), win: $('waveWin'), who: $('waveWho'), closeBtn: $('waveClose'), mode: $('waveMode'), shapes: $('waveShapes'), ops: $('waveOps'), canvas: $('waveCanvas'), hearBtn: $('waveHear') },
+  studio
+);
 
 function showView(view) {
   if (view === 'browser') return toggleBrowser();
@@ -259,6 +268,7 @@ function layout() {
 function renderAll() {
   if (ui.view === 'rack') rack.render();
   if (ui.view === 'mixer') mixer.render();
+  if (waveEditor.isOpen) waveEditor.render();
   renderToolbar();
   renderRollHead();
   renderKeysInfo();

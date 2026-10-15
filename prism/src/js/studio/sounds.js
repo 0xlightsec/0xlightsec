@@ -22,6 +22,7 @@
 
 import { pianoFrequency } from '../theory/piano.js';
 import { driveCurve } from './fx.js';
+import { periodicWave } from './wave.js';
 
 const saw = (detune = 0, gain = 0.6) => ({ type: 'sawtooth', ratio: 1, detune, gain });
 const tone = (type, ratio = 1, gain = 0.6, detune = 0) => ({ type, ratio, gain, detune });
@@ -160,6 +161,29 @@ export class StudioSynth {
     this.lastFreq = 0;       // for gliding mono sounds
     this.booked = [];        // notes booked ahead by the piano roll
     this.lastBooked = null;
+    this.waveTable = null;   // a drawn wave (PeriodicWave) every oscillator plays instead of its own shape
+    this.waveKey = null;
+  }
+
+  /**
+   * Play a drawn cycle (WAVE_N samples) on every oscillator, or null for the
+   * sounds' own shapes. Voices already sounding switch at once, so you hear the
+   * wave change as you draw it with a note held.
+   */
+  setWave(samples) {
+    const key = samples ? samples.join(',') : null;
+    if (key === this.waveKey) return;
+    this.waveKey = key;
+    this.waveTable = samples ? periodicWave(this.ctx, samples) : null;
+    for (const list of this.voices.values()) for (const v of list) this.applyWave(v);
+    for (const b of this.booked) this.applyWave(b.voice);
+  }
+
+  applyWave(v) {
+    for (const o of v.tones) {
+      if (this.waveTable) o.setPeriodicWave(this.waveTable);
+      else o.type = o.shape;
+    }
   }
 
   get preset() {
@@ -302,9 +326,11 @@ export class StudioSynth {
     }
 
     const start = glideFrom || 0;
-    const oscs = oscillatorsOf(p).map((o) => {
+    const tones = oscillatorsOf(p).map((o) => {
       const osc = ctx.createOscillator();
-      osc.type = o.type;
+      osc.shape = o.type; // its own shape, for when a drawn wave is cleared
+      if (this.waveTable) osc.setPeriodicWave(this.waveTable);
+      else osc.type = o.type;
       const target = f * o.ratio;
       if (start) {
         osc.frequency.setValueAtTime(start * o.ratio, now);
@@ -322,6 +348,7 @@ export class StudioSynth {
       osc.start(now);
       return osc;
     });
+    const oscs = [...tones];
     this.lastFreq = f;
 
     // Tremolo multiplies the sound ahead of the envelope, so a release still fades it out.
@@ -334,7 +361,7 @@ export class StudioSynth {
       amount.gain.setValueAtTime(0, now);
       amount.gain.linearRampToValueAtTime(depth, now + delay + 0.02);
       lfo.connect(amount);
-      if (to === 'pitch') for (const o of oscs) amount.connect(o.detune);
+      if (to === 'pitch') for (const o of tones) amount.connect(o.detune);
       else if (to === 'filter') amount.connect(filter.frequency);
       else {
         const trem = ctx.createGain();
@@ -347,6 +374,6 @@ export class StudioSynth {
     }
 
     tail.connect(amp).connect(this.out);
-    return { midi, amp, oscs, release: r };
+    return { midi, amp, oscs, tones, release: r };
   }
 }

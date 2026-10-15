@@ -14,6 +14,7 @@
  */
 
 import { SOUNDS, GROUPS } from '../../studio/sounds.js';
+import { WAVE_N, baseWaveOf } from '../../studio/wave.js';
 import { KITS, KIT_LABELS } from '../../studio/drums.js';
 import { Knob } from '../../studio/knob.js';
 import { DRUMS, PATTERN_BARS, MAX_INSERTS, ROOT, hueOf } from '../model.js';
@@ -289,6 +290,13 @@ export class ChannelRack {
         });
         s.blur();
       });
+      // The wave it plays: a little picture, and the editor behind it.
+      const wave = el('button', 'insp-wave', { title: ch.wave ? 'Edit the drawn wave' : 'Draw the waveform this sound plays' });
+      const pic = el('canvas', 'insp-wave-pic');
+      wave.append(pic, el('span', 'insp-wave-label', { text: ch.wave ? 'Wave · drawn · edit' : 'Wave · draw it' }));
+      wave.addEventListener('click', () => this.studio.openWave(ch.id));
+      field('Wave', wave);
+      requestAnimationFrame(() => drawWavePic(pic, ch.wave ?? baseWaveOf(SOUNDS[ch.sound]), hueOf(this.song.channels.indexOf(ch)), !!ch.wave));
       const knobs = el('div', 'insp-knobs');
       for (const [k, label, hue] of [['tone', 'Tone', 48], ['attack', 'Attack', 120], ['release', 'Release', 200]]) {
         const d = el('div');
@@ -375,4 +383,28 @@ export class ChannelRack {
     });
     box.appendChild(acts);
   }
+}
+
+/** One cycle on a small canvas, for the inspector. */
+function drawWavePic(canvas, samples, hue, drawn) {
+  const r = canvas.getBoundingClientRect();
+  if (!r.width) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(r.width * dpr);
+  canvas.height = Math.round(r.height * dpr);
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = r.width, h = r.height;
+  g.fillStyle = 'rgba(140, 220, 255, 0.12)';
+  g.fillRect(0, Math.round(h / 2), w, 1);
+  g.beginPath();
+  for (let n = 0; n <= WAVE_N; n++) {
+    const x = (n / WAVE_N) * w;
+    const y = h / 2 - samples[n % WAVE_N] * (h / 2 - 3);
+    if (n === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+  g.strokeStyle = drawn ? `hsl(${hue}, 95%, 70%)` : 'rgba(200, 230, 245, 0.55)';
+  g.lineWidth = 1.5;
+  g.stroke();
 }

@@ -102,7 +102,23 @@ Hat, Crash, Tom, Rim, Snap, Perc, Chant, Riser) and the kit (Classic, Boom, Lo-f
 Hyper, Rage, Club, Rock, Hood). A Riser lasts a bar, so start it a bar before the
 drop. The panel also has Tone/Attack/Release, the mixer insert, quick fills (every
 ⅛, ¼, ½ or bar), move, clone and delete. Patterns are 1–16 bars long and have a
-swing knob. **Beats** in the Browser writes a ready-made groove (Pulse to Grunge,
+swing knob.
+
+**Wave.** Every synth channel's panel shows the waveform it plays; click it to
+draw your own, the way FL's Sytrus and Harmor let you:
+- **Draw:** drag across one cycle of the wave to reshape it. The first stroke
+  starts from the sound's own shape, shown as a dotted line underneath.
+- **Harmonics:** bars for the first 32 harmonics; drag them up and down.
+- **Shapes** to start from: sine, triangle, saw, square, pulse, organ, fold, or
+  **Random** for a new timbre every click. Then **Smooth**, **Symmetry** (odd
+  harmonics only, hollow like a square), **Normalize** and **Invert**.
+- **Hear** holds a note while you draw, so the sound changes under your hand. A
+  note you hold on the keyboard changes too.
+
+Every oscillator of the sound plays your wave, with the sound's own envelope,
+filter, glide and effects, so a drawn Glider still glides. The browser band-limits
+the wave, so a drawn saw doesn't alias. **Reset to sound** goes back to the
+sound's own shapes. Drawn waves are saved with the song. **Beats** in the Browser writes a ready-made groove (Pulse to Grunge,
 and Hoodtrap) into the current pattern. In an empty song it brings its tempo too.
 
 **Piano Roll.** It looks and works like FL Studio's:
@@ -515,10 +531,10 @@ src/js/daw/             model.js (song, patterns, playlist, mixer, undo) · midi
                         instruments.js · mixer.js · engine.js · songs-db.js ·
                         cynmixx.js (the one-click beat generator) · app.js
 src/js/daw/views/       rack.js · piano-roll.js · piano-keys.js · playlist.js · mixer-view.js ·
-                        automation-lane.js · browser.js ·
+                        automation-lane.js · wave-editor.js · browser.js ·
                         datacenter.js (the backdrop)
-src/js/studio/          (the Live page) engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
-                        sounds.js · voice-fx.js · pitch-worklet.js · perf.js ·
+src/js/studio/          (the Live page, and what the Studio shares) engine.js · looper.js · looper-worklet.js · fx.js · drums.js ·
+                        sounds.js · wave.js (drawn waveforms) · voice-fx.js · pitch-worklet.js · perf.js ·
                         perf-worklet.js · project.js · library.js · roll.js ·
                         roll-view.js · knob.js · app.js
 src/js/scope/           engine.js · capture-worklet.js · live.js · live-worklet.js ·
@@ -535,7 +551,8 @@ the oscilloscope's trigger interpolation, peak-to-peak, RMS and dBFS, the
 beatmaker's song model (steps and notes, muted notes, pattern and song playback, loops and
 clip repeats, beats, undo, loading untrusted files), MIDI file reading and writing,
 the mixer growing and shrinking (a new channel gets its own insert; removing one
-re-routes its channels), effect slots, automation curves (smooth without overshoot,
+re-routes its channels), effect slots, drawn waves (shapes, harmonics both ways,
+symmetry, cleaning on load), automation curves (smooth without overshoot,
 the parabola bend, stairs, pulses, waves; saved and cleaned on load), the Cynmixx generator (the same seed gives the same beat, the snare bounce, the 808
 on it, every melodic note in the Phrygian key, the octave-up hook, slides, re-rolls
 that keep the other half, re-rolling after a save), the scales, the clipper and gate,
